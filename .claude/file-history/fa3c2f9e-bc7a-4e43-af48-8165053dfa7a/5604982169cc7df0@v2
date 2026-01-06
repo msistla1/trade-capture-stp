@@ -1,0 +1,9 @@
+namespace Aurora.Core.Entities;
+
+public class Counterparty : BaseEntity
+{
+    public string CounterpartyCode { get; set; } = string.Empty;
+    public string CounterpartyName { get; set; } = string.Empty;
+    public string CounterpartyType { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+}

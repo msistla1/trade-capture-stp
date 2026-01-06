@@ -1,0 +1,387 @@
+# Project File Templates
+
+These are the .csproj templates for each service. Once you have .NET 8 SDK installed, you can use these to create the remaining project files.
+
+## Compliance.API.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Common\Shared.Common.csproj" />
+    <ProjectReference Include="..\Compliance.Domain\Compliance.Domain.csproj" />
+    <ProjectReference Include="..\Compliance.Infrastructure\Compliance.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## Compliance.Domain.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Common\Shared.Common.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## Compliance.Infrastructure.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Compliance.Domain\Compliance.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Contracts\Shared.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## Allocation.API.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Common\Shared.Common.csproj" />
+    <ProjectReference Include="..\Allocation.Domain\Allocation.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## TradeOrchestrator.API.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="8.0.0" />
+    <PackageReference Include="Polly" Version="8.2.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Common\Shared.Common.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Infrastructure\Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## TradeBooking.API.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Shared.Common\Shared.Common.csproj" />
+    <ProjectReference Include="..\TradeBooking.Domain\TradeBooking.Domain.csproj" />
+    <ProjectReference Include="..\TradeBooking.Infrastructure\TradeBooking.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## Shared.Infrastructure.csproj
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="8.0.0" />
+    <PackageReference Include="Polly" Version="8.2.0" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared.Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="..\Shared.Common\Shared.Common.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+## Creating Projects from Command Line
+
+Once you have .NET 8 SDK installed, you can create any missing projects using these commands:
+
+### Web API Projects
+
+```bash
+# Compliance API
+cd src/Services/Compliance/Compliance.API
+dotnet new webapi -n Compliance.API
+
+# Allocation API
+cd src/Services/Allocation/Allocation.API
+dotnet new webapi -n Allocation.API
+
+# TradeBooking API
+cd src/Services/TradeBooking/TradeBooking.API
+dotnet new webapi -n TradeBooking.API
+
+# TradeOrchestrator API
+cd src/Services/TradeOrchestrator/TradeOrchestrator.API
+dotnet new webapi -n TradeOrchestrator.API
+
+# FundData API
+cd src/Services/FundData/FundData.API
+dotnet new webapi -n FundData.API
+
+# ReferenceData API
+cd src/Services/ReferenceData/ReferenceData.API
+dotnet new webapi -n ReferenceData.API
+```
+
+### Class Library Projects
+
+```bash
+# Domain projects
+cd src/Services/Compliance/Compliance.Domain
+dotnet new classlib -n Compliance.Domain
+
+cd src/Services/Allocation/Allocation.Domain
+dotnet new classlib -n Allocation.Domain
+
+cd src/Services/TradeBooking/TradeBooking.Domain
+dotnet new classlib -n TradeBooking.Domain
+
+cd src/Services/FundData/FundData.Domain
+dotnet new classlib -n FundData.Domain
+
+# Infrastructure projects
+cd src/Services/Compliance/Compliance.Infrastructure
+dotnet new classlib -n Compliance.Infrastructure
+
+cd src/Services/TradeBooking/TradeBooking.Infrastructure
+dotnet new classlib -n TradeBooking.Infrastructure
+
+# Shared projects
+cd src/Shared/Shared.Contracts
+dotnet new classlib -n Shared.Contracts
+
+cd src/Shared/Shared.Common
+dotnet new classlib -n Shared.Common
+
+cd src/Shared/Shared.Infrastructure
+dotnet new classlib -n Shared.Infrastructure
+```
+
+### Add NuGet Packages
+
+After creating projects, add required packages:
+
+```bash
+# Example: Compliance.API
+cd src/Services/Compliance/Compliance.API
+
+dotnet add package Microsoft.AspNetCore.OpenApi --version 8.0.0
+dotnet add package Microsoft.CodeAnalysis.CSharp.Scripting --version 4.8.0
+dotnet add package Microsoft.EntityFrameworkCore.SqlServer --version 8.0.0
+dotnet add package Microsoft.EntityFrameworkCore.Tools --version 8.0.0
+dotnet add package Swashbuckle.AspNetCore --version 6.5.0
+dotnet add package Serilog.AspNetCore --version 8.0.0
+```
+
+### Add Project References
+
+```bash
+# Example: Compliance.API references
+cd src/Services/Compliance/Compliance.API
+
+dotnet add reference ../../../Shared/Shared.Contracts/Shared.Contracts.csproj
+dotnet add reference ../../../Shared/Shared.Common/Shared.Common.csproj
+dotnet add reference ../Compliance.Domain/Compliance.Domain.csproj
+dotnet add reference ../Compliance.Infrastructure/Compliance.Infrastructure.csproj
+```
+
+## Verifying Your Setup
+
+After creating all projects:
+
+```bash
+# From solution root
+dotnet restore
+dotnet build
+
+# Should show successful build for all projects
+```
+
+## Common NuGet Packages Used
+
+### All Web APIs
+- Microsoft.AspNetCore.OpenApi 8.0.0
+- Swashbuckle.AspNetCore 6.5.0
+- Serilog.AspNetCore 8.0.0
+
+### APIs with Database Access
+- Microsoft.EntityFrameworkCore.SqlServer 8.0.0
+- Microsoft.EntityFrameworkCore.Tools 8.0.0
+
+### Compliance-Specific
+- Microsoft.CodeAnalysis.CSharp.Scripting 4.8.0
+
+### Orchestrator-Specific
+- Microsoft.Extensions.Http.Polly 8.0.0
+- Polly 8.2.0
+
+### Shared Libraries
+- System.ComponentModel.Annotations 8.0.0
+- System.Text.Json 8.0.0
+
+## Quick Start After Installing .NET 8
+
+1. **Install .NET 8 SDK**
+   ```bash
+   # Download from: https://dotnet.microsoft.com/download/dotnet/8.0
+   dotnet --version  # Verify installation
+   ```
+
+2. **Navigate to solution**
+   ```bash
+   cd C:\Users\mcsis\TradeAllocationSystem
+   ```
+
+3. **Restore and build**
+   ```bash
+   dotnet restore
+   dotnet build
+   ```
+
+4. **Run a service**
+   ```bash
+   cd src/Services/Compliance/Compliance.API
+   dotnet run
+   ```
+
+5. **Access Swagger**
+   - Open browser to http://localhost:5001/swagger
+
+## What's Already Implemented
+
+✅ **Complete**:
+- Solution structure (.sln file)
+- Domain models (Value Objects, Entities, DTOs, Enums)
+- Compliance rule engine with Roslyn
+- Three allocation strategies
+- Exception handling middleware
+- Service interfaces and implementations
+- Controllers for Compliance API
+- Comprehensive documentation
+
+🔧 **Needs Project Files**:
+The source code exists but some services may need their .csproj files created using the templates above.
+
+🏗️ **Implementation Required**:
+- Database contexts and migrations
+- Repository implementations
+- Remaining API controllers
+- HTTP client configurations
+- appsettings.json files
+- Program.cs files for each API
+
+## Next Steps
+
+1. Install .NET 8 SDK
+2. Create missing .csproj files using templates above
+3. Run `dotnet restore` and `dotnet build`
+4. Implement remaining services following existing patterns
+5. Set up databases and run migrations
+6. Test via Swagger UI
+
+---
+
+**All templates provided - ready for .NET 8 SDK installation!**

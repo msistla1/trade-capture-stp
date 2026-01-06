@@ -1,0 +1,42 @@
+using Shared.Contracts.Enums;
+
+namespace Shared.Contracts.DTOs;
+
+// Request to evaluate compliance for a trade
+public record ComplianceRequest(
+    string SecurityId,
+    string CounterpartyId,
+    decimal TotalAmount,
+    decimal Price,
+    DateTime TradeDate,
+    List<string> FundIds,
+    string? RequestId = null
+);
+
+// Response from compliance evaluation
+public record ComplianceResponse(
+    string RequestId,
+    DateTime EvaluatedAt,
+    List<FundComplianceResult> Results,
+    ComplianceStatus OverallStatus
+);
+
+// Compliance result for a single fund
+public record FundComplianceResult(
+    string FundId,
+    string FundName,
+    bool IsCompliant,
+    decimal AvailableCapacity,
+    List<RuleEvaluationResult> RuleResults,
+    List<string> Violations
+);
+
+// Result of evaluating a single rule
+public record RuleEvaluationResult(
+    string RuleId,
+    string RuleName,
+    bool Passed,
+    string Message,
+    decimal? CalculatedValue = null,
+    decimal? Threshold = null
+);

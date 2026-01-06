@@ -1,0 +1,310 @@
+# Trade Workflow System
+
+A Domain-Driven Design (DDD) based trade workflow management system built with ASP.NET Core and Stateless state machine.
+
+## Architecture
+
+This solution follows DDD principles with clear separation of concerns across four projects:
+
+### Projects
+
+- **TradeWorkflow.Domain**: Core domain entities, enums, and business logic
+- **TradeWorkflow.Application**: Application services, state machine, and contracts
+- **TradeWorkflow.Infrastructure**: Data persistence (EF Core), repositories, and service implementations
+- **TradeWorkflow.API**: REST API endpoints with event-driven architecture
+
+## State Machine Flow
+
+The trade workflow implements the following state transitions:
+
+```
+RECEIVED
+  └─[StartValidation]─> VALIDATION IN PROGRESS
+                          ├─[ValidationSucceeded]─> DUPLICATE CHECK IN PROGRESS
+                          │                           ├─[NoDuplicateFound]─> READY FOR PROCESSING
+                          │                           └─[DuplicateFound]───> READY FOR PROCESSING
+                          │                                                    ├─[CreateNew]────> CREATED
+                          │                                                    │                   └─[SaveSucceeded]─> SAVED
+                          │                                                    │                   └─[SaveFailed]───> FAILED
+                          │                                                    ├─[UpdateExisting]> UPDATED
+                          │                                                    │                   └─[SaveSucceeded]─> SAVED
+                          │                                                    │                   └─[SaveFailed]───> FAILED
+                          │                                                    └─[RejectTrade]──> REJECTED
+                          │                                                                        └─[SaveSucceeded]─> SAVED
+                          │                                                                        └─[SaveFailed]───> FAILED
+                          └─[ValidationFailed]───> REJECTED
+                                                    └─[SaveSucceeded]─> SAVED
+                                                    └─[SaveFailed]───> FAILED
+
+FAILED
+  └─[Retry]─> RECEIVED (if retry count < max retries)
+```
+
+### States
+
+- **Received**: Initial state when a trade is created
+- **ValidationInProgress**: Trade is being validated
+- **DuplicateCheckInProgress**: Checking for duplicate trades
+- **ReadyForProcessing**: Trade is ready to be created, updated, or rejected
+- **Created**: New trade record created
+- **Updated**: Existing trade record updated
+- **Rejected**: Trade rejected due to validation or business rules
+- **Saved**: Terminal state - trade successfully persisted
+- **Failed**: Terminal state with retry capability
+
+### Triggers
+
+- **StartValidation**: Begin validation process
+- **ValidationSucceeded**: Validation passed
+- **ValidationFailed**: Validation failed
+- **NoDuplicateFound**: No duplicate trade found
+- **DuplicateFound**: Duplicate trade detected
+- **CreateNew**: Create a new trade record
+- **UpdateExisting**: Update an existing trade record
+- **RejectTrade**: Reject the trade
+- **SaveSucceeded**: Save operation succeeded
+- **SaveFailed**: Save operation failed
+- **Retry**: Retry a failed trade
+
+## API Endpoints
+
+### Create Trade
+```http
+POST /api/trades
+Content-Type: application/json
+
+{
+  "tradeReference": "TRD-001",
+  "instrument": "AAPL",
+  "quantity": 100,
+  "price": 150.50,
+  "counterparty": "ABC Corp",
+  "tradeDate": "2026-01-05T00:00:00Z",
+  "tradeType": "Buy"
+}
+```
+
+### Get Trade
+```http
+GET /api/trades/{id}
+```
+
+### Get All Trades
+```http
+GET /api/trades
+```
+
+### Process Trigger (Event-Driven)
+```http
+POST /api/trades/{id}/events
+Content-Type: application/json
+
+{
+  "trigger": "StartValidation"
+}
+```
+
+### Get Permitted Triggers
+```http
+GET /api/trades/{id}/permitted-triggers
+```
+
+### Get Trade History
+```http
+GET /api/trades/{id}/history
+```
+
+## Getting Started
+
+### Prerequisites
+
+- .NET 10.0 SDK
+- SQL Server or LocalDB
+- Visual Studio 2022 or VS Code
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   cd TradeWorkflow
+   ```
+
+2. **Update connection string** (if needed)
+
+   Edit `TradeWorkflow.API/appsettings.json`:
+   ```json
+   {
+     "ConnectionStrings": {
+       "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=TradeWorkflowDb;Trusted_Connection=True;MultipleActiveResultSets=true"
+     }
+   }
+   ```
+
+3. **Build the solution**
+   ```bash
+   dotnet build
+   ```
+
+4. **Run the API**
+   ```bash
+   cd TradeWorkflow.API
+   dotnet run
+   ```
+
+5. **Access Swagger UI**
+
+   Navigate to: `https://localhost:5001/swagger`
+
+The database will be automatically created and migrated on first run.
+
+## Example Workflow
+
+### 1. Create a new trade
+```bash
+curl -X POST https://localhost:5001/api/trades \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tradeReference": "TRD-001",
+    "instrument": "AAPL",
+    "quantity": 100,
+    "price": 150.50,
+    "counterparty": "ABC Corp",
+    "tradeDate": "2026-01-05T00:00:00Z",
+    "tradeType": "Buy"
+  }'
+```
+
+Response will include the trade ID and current state (Received).
+
+### 2. Start validation
+```bash
+curl -X POST https://localhost:5001/api/trades/{trade-id}/events \
+  -H "Content-Type: application/json" \
+  -d '{"trigger": "StartValidation"}'
+```
+
+The state machine will automatically:
+- Validate the trade
+- If valid, proceed to duplicate check
+- If duplicate found or not, move to ReadyForProcessing
+
+### 3. Create the trade record
+```bash
+curl -X POST https://localhost:5001/api/trades/{trade-id}/events \
+  -H "Content-Type: application/json" \
+  -d '{"trigger": "CreateNew"}'
+```
+
+This will transition through Created -> Saved states.
+
+### 4. View trade history
+```bash
+curl -X GET https://localhost:5001/api/trades/{trade-id}/history
+```
+
+## Running Tests
+
+The solution includes comprehensive unit tests covering all layers.
+
+### Run all tests
+```bash
+cd TradeWorkflow
+dotnet test
+```
+
+### Test Coverage
+- **46 unit tests** across Domain, Application, and Infrastructure layers
+- **Domain tests**: Business logic validation (7 tests)
+- **Application tests**: State machine and workflow service (18 tests)
+- **Infrastructure tests**: Validation, repositories, duplicate checking (21 tests)
+
+See [TradeWorkflow.Tests/README.md](TradeWorkflow.Tests/README.md) for detailed test documentation.
+
+### Test Technologies
+- xUnit for testing framework
+- Moq for mocking dependencies
+- FluentAssertions for readable assertions
+- EF Core InMemory for repository testing
+
+All tests use the **Arrange-Act-Assert** pattern and include a fluent **TradeBuilder** for easy test data creation.
+
+## Customization
+
+### Adding Custom Validation Rules
+
+Edit `TradeWorkflow.Infrastructure/Services/ValidationService.cs`:
+
+```csharp
+public Task<(bool IsValid, string? ErrorMessage)> ValidateTradeAsync(Trade trade)
+{
+    var errors = new List<string>();
+
+    // Add your custom validation logic here
+    if (trade.Price > 10000)
+        errors.Add("Price exceeds maximum limit");
+
+    // ... rest of validation
+}
+```
+
+### Adding Custom Duplicate Check Logic
+
+Edit `TradeWorkflow.Infrastructure/Services/DuplicateCheckService.cs`:
+
+```csharp
+public async Task<(bool IsDuplicate, Guid? ExistingTradeId)> CheckDuplicateAsync(Trade trade)
+{
+    // Customize duplicate detection logic
+    var existingTrade = await _tradeRepository.GetByTradeReferenceAsync(trade.TradeReference);
+
+    // Add additional checks (e.g., by instrument and date)
+
+    return (existingTrade != null, existingTrade?.Id);
+}
+```
+
+### Adding Custom Processing Logic
+
+Edit `TradeWorkflow.Infrastructure/Services/TradeProcessingService.cs` to customize:
+- `CreateTradeRecordAsync`: Logic for creating new trades
+- `UpdateTradeRecordAsync`: Logic for updating existing trades
+- `RejectTradeAsync`: Logic for handling rejections
+
+## Architecture Benefits
+
+1. **Domain-Driven Design**: Clear separation of domain, application, and infrastructure layers
+2. **State Machine**: Stateless library ensures valid state transitions and prevents invalid operations
+3. **Event-Driven API**: Process trades step-by-step with full visibility into state transitions
+4. **Extensible**: Easy to add new states, triggers, or business logic
+5. **Testable**: Each layer can be tested independently through interfaces
+6. **Audit Trail**: Complete history of state transitions stored in database
+
+## Database Schema
+
+### Trades Table
+- Id (Guid, PK)
+- TradeReference (string, indexed)
+- CurrentState (enum as string, indexed)
+- Instrument, Quantity, Price, Counterparty, TradeDate, TradeType
+- IsValidated, IsDuplicate, ValidationErrors
+- RetryCount, MaxRetries
+- CreatedAt, UpdatedAt, ErrorMessage
+
+### TradeHistories Table
+- Id (Guid, PK)
+- TradeId (Guid, FK, indexed)
+- FromState, ToState, Trigger (enums as strings)
+- TransitionedAt (DateTime, indexed)
+- Notes (string)
+
+## Technologies Used
+
+- ASP.NET Core 10.0
+- Entity Framework Core 10.0
+- Stateless 5.20.0
+- SQL Server
+- Swashbuckle (Swagger/OpenAPI)
+
+## License
+
+This project is licensed under the MIT License.

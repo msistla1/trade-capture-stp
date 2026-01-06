@@ -1,0 +1,13 @@
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Application.Contracts;
+
+public interface ITradeRepository
+{
+    Task<Trade?> GetByIdAsync(Guid id);
+    Task<Trade?> GetByTradeReferenceAsync(string tradeReference);
+    Task<IEnumerable<Trade>> GetAllAsync();
+    Task<Trade> CreateAsync(Trade trade);
+    Task UpdateAsync(Trade trade);
+    Task SaveChangesAsync();
+}

@@ -1,0 +1,67 @@
+using Compliance.Domain.RuleEngine;
+using Shared.Contracts.Entities;
+
+namespace Compliance.Infrastructure.Repositories;
+
+public interface IFundRepository
+{
+    Task<Fund?> GetByIdAsync(string id);
+    Task<List<Fund>> GetByStrategyAsync(string strategyId);
+    Task<bool> ExistsAsync(string id);
+}
+
+public interface ISecurityRepository
+{
+    Task<Security?> GetByIdAsync(string id);
+    Task<bool> ExistsAsync(string id);
+}
+
+public interface IComplianceRuleRepository
+{
+    Task<List<ComplianceRule>> GetActiveRulesAsync(string fundId, DateTime effectiveDate);
+    Task<ComplianceRule?> GetByIdAsync(Guid id);
+    Task SaveAsync(ComplianceRule rule);
+}
+
+public interface IPortfolioRepository
+{
+    Task<IPortfolioData> GetPortfolioDataAsync(string fundId);
+}
+
+// Implementation of IPortfolioData that wraps repository calls
+public class PortfolioData : IPortfolioData
+{
+    private readonly string _fundId;
+    private readonly IPortfolioRepository _repository;
+
+    public PortfolioData(string fundId, IPortfolioRepository repository)
+    {
+        _fundId = fundId;
+        _repository = repository;
+    }
+
+    public async Task<decimal> GetIssuerExposureAsync(string fundId, string issuerId)
+    {
+        // This would query the PortfolioHoldings table
+        // Aggregate all securities from this issuer
+        return await Task.FromResult(0m); // Placeholder
+    }
+
+    public async Task<decimal> GetSecurityPositionAsync(string fundId, string securityId)
+    {
+        // Query current position in this security
+        return await Task.FromResult(0m); // Placeholder
+    }
+
+    public async Task<decimal> GetSectorExposureAsync(string fundId, string sector)
+    {
+        // Query all securities in this sector
+        return await Task.FromResult(0m); // Placeholder
+    }
+
+    public async Task<decimal> GetCounterpartyExposureAsync(string fundId, string counterpartyId)
+    {
+        // Query all trades/positions with this counterparty
+        return await Task.FromResult(0m); // Placeholder
+    }
+}

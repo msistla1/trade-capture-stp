@@ -1,0 +1,14 @@
+namespace TradeWorkflow.Domain.Enums;
+
+public enum TcrState
+{
+    Received,
+    ValidationInProgress,
+    DuplicateCheckInProgress,
+    ReadyForProcessing,
+    Created,
+    Updated,
+    Rejected,
+    Saved,
+    Failed
+}

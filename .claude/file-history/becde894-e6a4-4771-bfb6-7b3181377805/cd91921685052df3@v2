@@ -1,0 +1,108 @@
+namespace Shared.Contracts.Enums;
+
+public enum TradeStatus
+{
+    Pending,
+    Booked,
+    Settled,
+    Cancelled,
+    Failed
+}
+
+public enum AllocationStatus
+{
+    Pending,
+    Allocated,
+    Confirmed,
+    Rejected
+}
+
+public enum AllocationMethodology
+{
+    ProRata,
+    Targeted,
+    Custom
+}
+
+public enum ComplianceStatus
+{
+    AllPassed,
+    PartialFailure,
+    AllFailed
+}
+
+public enum OrchestrationStatus
+{
+    Pending,
+    ComplianceCheck,
+    AwaitingApproval,
+    Allocation,
+    Booking,
+    Completed,
+    Failed
+}
+
+public enum RuleType
+{
+    PercentageLimit,
+    CategoricalRestriction,
+    SecurityTypeRestriction,
+    ConcentrationLimit,
+    ExposureLimit,
+    RatingRequirement
+}
+
+public enum RuleCategory
+{
+    Issuer,
+    Security,
+    Counterparty,
+    Sector,
+    Geography,
+    Rating,
+    Maturity
+}
+
+public enum FundType
+{
+    Equity,
+    FixedIncome,
+    Balanced,
+    Alternative,
+    MoneyMarket
+}
+
+public enum FundStatus
+{
+    Active,
+    Closed,
+    Suspended
+}
+
+public enum SecurityType
+{
+    Equity,
+    CorporateBond,
+    GovernmentBond,
+    TreasuryBill,
+    MunicipalBond,
+    PreferredStock,
+    Option,
+    Future
+}
+
+public enum StrategyType
+{
+    Growth,
+    Value,
+    Income,
+    Balanced,
+    Alternative
+}
+
+public enum BookingStatus
+{
+    Success,
+    Failed,
+    Partial
+}

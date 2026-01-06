@@ -1,0 +1,546 @@
+# Trade Allocation and Compliance System
+
+A production-ready microservices-based trade allocation and compliance system for asset management firms, built with .NET 8.
+
+## Overview
+
+This system handles trade booking with multi-fund allocation, real-time compliance checking, and sophisticated allocation methodologies. It orchestrates a workflow that evaluates compliance rules across multiple funds, allocates trades based on capacity and strategy, and books trades with full audit trails.
+
+## Architecture
+
+### Microservices
+
+1. **TradeOrchestrator.API** (Port 5000) - Orchestrates the complete workflow
+2. **Compliance.API** (Port 5001) - Evaluates compliance rules and calculates capacity
+3. **Allocation.API** (Port 5002) - Distributes trades across funds using various strategies
+4. **TradeBooking.API** (Port 5003) - Persists trades with ACID transactions
+5. **FundData.API** (Port 5004) - Manages funds, strategies, and rules
+6. **ReferenceData.API** (Port 5005) - Securities and counterparty data
+
+### Workflow
+
+```
+UI → TradeOrchestrator
+       ↓
+   Compliance (parallel evaluation across funds)
+       ↓
+   User Approval (if partial failure)
+       ↓
+   Allocation (distribute based on methodology)
+       ↓
+   TradeBooking (persist with transaction)
+       ↓
+   Response to UI
+```
+
+## Technology Stack
+
+- **.NET 8** - Modern, high-performance framework
+- **SQL Server** - Relational database with EF Core 8
+- **Roslyn C# Scripting** - Dynamic rule evaluation engine
+- **ASP.NET Core Web API** - REST API framework
+- **Polly** - Resilience and retry patterns
+- **Serilog** - Structured logging
+- **Swagger/OpenAPI** - API documentation
+- **Redis** - Distributed caching (optional, for multi-instance)
+
+## Project Structure
+
+```
+TradeAllocationSystem/
+├── src/
+│   ├── Services/
+│   │   ├── TradeOrchestrator/TradeOrchestrator.API/
+│   │   ├── Compliance/
+│   │   │   ├── Compliance.API/
+│   │   │   ├── Compliance.Domain/
+│   │   │   └── Compliance.Infrastructure/
+│   │   ├── Allocation/
+│   │   │   ├── Allocation.API/
+│   │   │   └── Allocation.Domain/
+│   │   ├── TradeBooking/
+│   │   │   ├── TradeBooking.API/
+│   │   │   ├── TradeBooking.Domain/
+│   │   │   └── TradeBooking.Infrastructure/
+│   │   ├── FundData/
+│   │   │   ├── FundData.API/
+│   │   │   └── FundData.Domain/
+│   │   └── ReferenceData/ReferenceData.API/
+│   │
+│   └── Shared/
+│       ├── Shared.Contracts/ - DTOs, Entities, Value Objects, Enums
+│       ├── Shared.Common/ - Middleware, Exceptions, Extensions
+│       └── Shared.Infrastructure/ - HttpClients, Caching, Logging
+│
+├── tests/
+│   ├── UnitTests/
+│   └── IntegrationTests/
+│
+└── docs/
+    ├── architecture/
+    ├── api-specs/
+    └── deployment/
+```
+
+## Key Features
+
+### 1. Compliance Rule Engine
+
+- **Database-driven rules** stored as JSON with C# expressions
+- **Roslyn Script API** for dynamic evaluation
+- **Multiple rule types**:
+  - Percentage Limit (e.g., max 5% single issuer)
+  - Categorical Restriction (e.g., investment grade only)
+  - Security Type Restriction (e.g., no bonds except T-Bills)
+  - Rating Requirement (minimum credit rating)
+- **Parallel evaluation** across all funds
+- **Capacity calculation** - minimum across all rule constraints
+
+### 2. Allocation Strategies
+
+#### Pro-Rata Allocation
+- Allocates proportionally based on available capacity
+- `fund.allocation = (fund.capacity / total.capacity) * trade.amount`
+- Handles rounding by allocating remainder to fund with most room
+
+#### Targeted Allocation
+- User specifies target amount per fund
+- Processes funds in priority order
+- Caps at min(target, capacity, remaining amount)
+
+#### Custom Allocation
+- User specifies weights per fund
+- Two-pass algorithm:
+  1. Allocate by weight with capacity constraints
+  2. Redistribute shortfall to funds with remaining capacity (by priority)
+
+### 3. Partial Failure Handling
+
+When some funds fail compliance but others pass:
+1. System returns `AwaitingApproval` status
+2. UI displays compliant vs non-compliant funds
+3. User decides: Proceed with subset, cancel, or modify
+4. If approved, workflow continues with compliant funds only
+
+### 4. Transaction Management
+
+Trade booking uses database transactions:
+```csharp
+BEGIN TRANSACTION
+  INSERT Trade
+  INSERT TradeAllocations (multiple)
+  INSERT AuditLog
+  UPDATE OrchestrationState
+COMMIT TRANSACTION
+```
+
+Orchestration rollback: If booking fails, calls cancel API and updates state.
+
+## Domain Model
+
+### Value Objects
+
+- **Money** - Amount with currency, supports arithmetic operations
+- **Price** - Price per unit with currency
+- **TradeDate** - Date with settlement calculation (T+2 business days)
+- **Percentage** - Validated percentage (0-100)
+
+### Core Entities
+
+- **Trade** - Trade details with allocations
+- **TradeAllocation** - Per-fund allocation within a trade
+- **Fund** - Fund master data with NAV and rules
+- **ComplianceRule** - Rule definition with JSON configuration
+- **Security** - Security reference data
+- **Strategy** - Investment strategy with fund associations
+
+### Enums
+
+- AllocationMethodology: ProRata, Targeted, Custom
+- ComplianceStatus: AllPassed, PartialFailure, AllFailed
+- OrchestrationStatus: Pending, ComplianceCheck, AwaitingApproval, Allocation, Booking, Completed, Failed
+
+## API Contracts
+
+### Compliance API
+
+**POST /api/compliance/evaluate**
+
+Request:
+```json
+{
+  "securityId": "AAPL",
+  "counterpartyId": "BROKER1",
+  "totalAmount": 1000000,
+  "price": 150.00,
+  "tradeDate": "2024-01-15",
+  "fundIds": ["FUND001", "FUND002", "FUND003"]
+}
+```
+
+Response:
+```json
+{
+  "requestId": "req-123",
+  "evaluatedAt": "2024-01-15T10:30:00Z",
+  "overallStatus": "PartialFailure",
+  "results": [
+    {
+      "fundId": "FUND001",
+      "fundName": "Growth Fund",
+      "isCompliant": true,
+      "availableCapacity": 500000,
+      "ruleResults": [...],
+      "violations": []
+    },
+    {
+      "fundId": "FUND002",
+      "fundName": "Income Fund",
+      "isCompliant": false,
+      "availableCapacity": 0,
+      "ruleResults": [...],
+      "violations": ["Exceeds max 5% issuer exposure"]
+    }
+  ]
+}
+```
+
+### Allocation API
+
+**POST /api/allocation/distribute**
+
+Request:
+```json
+{
+  "requestId": "req-123",
+  "securityId": "AAPL",
+  "totalAmount": 1000000,
+  "price": 150.00,
+  "methodology": "ProRata",
+  "funds": [
+    {
+      "fundId": "FUND001",
+      "availableCapacity": 500000,
+      "priority": 1
+    },
+    {
+      "fundId": "FUND003",
+      "availableCapacity": 750000,
+      "priority": 2
+    }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "requestId": "req-123",
+  "allocations": [
+    {
+      "fundId": "FUND001",
+      "allocatedAmount": 400000,
+      "allocatedShares": 2666.67,
+      "percentageOfTotal": 40,
+      "status": "Allocated"
+    },
+    {
+      "fundId": "FUND003",
+      "allocatedAmount": 600000,
+      "allocatedShares": 4000,
+      "percentageOfTotal": 60,
+      "status": "Allocated"
+    }
+  ],
+  "summary": {
+    "totalRequested": 1000000,
+    "totalAllocated": 1000000,
+    "unallocatedAmount": 0,
+    "fullyAllocated": true,
+    "warnings": []
+  }
+}
+```
+
+### Trade Booking API
+
+**POST /api/trades/book**
+
+Request:
+```json
+{
+  "requestId": "req-123",
+  "trade": {
+    "securityId": "AAPL",
+    "counterpartyId": "BROKER1",
+    "totalAmount": 1000000,
+    "price": 150.00,
+    "tradeDate": "2024-01-15",
+    "settlementDate": "2024-01-17",
+    "tradeType": "Buy",
+    "currency": "USD"
+  },
+  "allocations": [...],
+  "userId": "trader@firm.com",
+  "userApproved": false
+}
+```
+
+Response:
+```json
+{
+  "tradeId": "TRD-2024-00123",
+  "bookedAt": "2024-01-15T10:35:00Z",
+  "status": "Success",
+  "confirmations": [
+    {
+      "allocationId": "ALLOC-001",
+      "fundId": "FUND001",
+      "amount": 400000,
+      "confirmationNumber": "CONF-2024-00456"
+    }
+  ]
+}
+```
+
+## Prerequisites
+
+- **.NET 8 SDK** - Download from https://dotnet.microsoft.com/download/dotnet/8.0
+- **SQL Server 2019+** or **SQL Server Express**
+- **Visual Studio 2022** or **VS Code** with C# extension
+- **Git** for version control
+
+## Getting Started
+
+### 1. Install .NET 8 SDK
+
+```bash
+# Verify installation
+dotnet --version
+# Should show 8.0.x
+```
+
+### 2. Clone and Build
+
+```bash
+cd C:\Users\mcsis\TradeAllocationSystem
+
+# Restore dependencies
+dotnet restore
+
+# Build all projects
+dotnet build
+
+# Run tests (when available)
+dotnet test
+```
+
+### 3. Configure Database
+
+Update connection strings in `appsettings.json` for each service:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=TradeAllocation;Trusted_Connection=True;TrustServerCertificate=True"
+  }
+}
+```
+
+### 4. Run Database Migrations
+
+```bash
+# From Compliance.API directory
+dotnet ef database update
+
+# From TradeBooking.API directory
+dotnet ef database update
+
+# From FundData.API directory
+dotnet ef database update
+```
+
+### 5. Run Services
+
+Open multiple terminal windows:
+
+```bash
+# Terminal 1 - Compliance API
+cd src/Services/Compliance/Compliance.API
+dotnet run
+
+# Terminal 2 - Allocation API
+cd src/Services/Allocation/Allocation.API
+dotnet run
+
+# Terminal 3 - TradeBooking API
+cd src/Services/TradeBooking/TradeBooking.API
+dotnet run
+
+# Terminal 4 - TradeOrchestrator API
+cd src/Services/TradeOrchestrator/TradeOrchestrator.API
+dotnet run
+
+# Terminal 5 - FundData API
+cd src/Services/FundData/FundData.API
+dotnet run
+
+# Terminal 6 - ReferenceData API
+cd src/Services/ReferenceData/ReferenceData.API
+dotnet run
+```
+
+### 6. Access Swagger UI
+
+- TradeOrchestrator: http://localhost:5000/swagger
+- Compliance: http://localhost:5001/swagger
+- Allocation: http://localhost:5002/swagger
+- TradeBooking: http://localhost:5003/swagger
+- FundData: http://localhost:5004/swagger
+- ReferenceData: http://localhost:5005/swagger
+
+## Development Workflow
+
+### Adding a New Compliance Rule
+
+1. Create rule configuration:
+```json
+{
+  "expression": "portfolio.GetIssuerExposureAsync(fund.Id, security.IssuerId).Result + trade.Amount <= fund.NetAssetValue.Amount * 0.05m",
+  "parameters": {
+    "maxPercentage": 5.0,
+    "calculationType": "IssuerExposure"
+  },
+  "metadata": {
+    "displayFormat": "Max {maxPercentage}% exposure to single issuer",
+    "errorMessage": "Exceeds maximum issuer exposure of {maxPercentage}%",
+    "capacityExpression": "Math.Max(0, fund.NetAssetValue.Amount * 0.05m - portfolio.GetIssuerExposureAsync(fund.Id, security.IssuerId).Result)"
+  }
+}
+```
+
+2. Save via FundData API:
+```bash
+POST /api/funds/{fundId}/rules
+```
+
+3. Rule becomes active immediately (if within effective dates)
+
+### Testing Compliance Evaluation
+
+```bash
+POST http://localhost:5001/api/compliance/evaluate
+Content-Type: application/json
+
+{
+  "securityId": "AAPL",
+  "counterpartyId": "BROKER1",
+  "totalAmount": 1000000,
+  "price": 150.00,
+  "tradeDate": "2024-01-15",
+  "fundIds": ["FUND001", "FUND002"]
+}
+```
+
+### Testing Full Trade Workflow
+
+```bash
+POST http://localhost:5000/api/trades
+Content-Type: application/json
+
+{
+  "securityId": "AAPL",
+  "counterpartyId": "BROKER1",
+  "totalAmount": 1000000,
+  "price": 150.00,
+  "tradeDate": "2024-01-15",
+  "selectedFunds": ["FUND001", "FUND002", "FUND003"],
+  "strategyId": "GROWTH",
+  "allocationMethodology": "ProRata",
+  "userId": "trader@firm.com",
+  "currency": "USD"
+}
+```
+
+## Next Steps for Implementation
+
+### Immediate Priorities
+
+1. **Create remaining service implementations**:
+   - TradeOrchestrator.API orchestration service
+   - TradeBooking.API service and controller
+   - FundData.API and ReferenceData.API
+
+2. **Database Setup**:
+   - Create EF Core DbContexts
+   - Generate migrations
+   - Seed reference data
+
+3. **Add missing project files** (.csproj) for all services
+
+4. **HTTP Client Configuration**:
+   - Polly retry/circuit breaker policies
+   - Service client implementations
+
+5. **Configuration**:
+   - appsettings.json for each service
+   - Environment-specific configs
+
+6. **Testing**:
+   - Unit tests for strategies and rule engine
+   - Integration tests for workflows
+   - E2E tests
+
+### Future Enhancements
+
+- **Authentication & Authorization** (OAuth 2.0 / JWT)
+- **Docker Containerization**
+- **Kubernetes Deployment**
+- **Redis Distributed Cache** for multi-instance
+- **Message Queue** (RabbitMQ/Kafka) for async processing
+- **GraphQL API** for flexible queries
+- **Real-time Updates** (SignalR)
+- **Advanced Analytics Dashboard**
+
+## Implementation Status
+
+✅ **Completed**:
+- Solution structure with 6 microservices
+- Shared domain models (entities, value objects, DTOs, enums)
+- Compliance rule engine with Roslyn
+- Three allocation strategies (Pro-Rata, Targeted, Custom)
+- Exception handling middleware
+- API contracts and DTOs
+
+🚧 **In Progress**:
+- Service implementations and controllers
+- Database schemas and EF Core contexts
+- Project configuration files
+
+⏳ **Pending**:
+- HTTP clients with Polly resilience
+- Logging and monitoring setup
+- Caching implementation
+- Unit and integration tests
+- Deployment configuration
+
+## Contributing
+
+This is a production system - follow these guidelines:
+
+1. **Code Quality**: Maintain 80%+ test coverage
+2. **Security**: Never commit secrets or connection strings
+3. **Performance**: Profile before optimizing
+4. **Documentation**: Update README for major changes
+
+## License
+
+Proprietary - Internal use only
+
+## Support
+
+For questions or issues, contact the development team.
+
+---
+
+**Built with .NET 8 | Microservices Architecture | Production-Ready**

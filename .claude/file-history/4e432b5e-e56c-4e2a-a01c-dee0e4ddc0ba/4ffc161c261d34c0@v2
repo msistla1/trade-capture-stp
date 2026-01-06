@@ -1,0 +1,26 @@
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Infrastructure.Services;
+
+public class DuplicateCheckService : IDuplicateCheckService
+{
+    private readonly ITradeRepository _tradeRepository;
+
+    public DuplicateCheckService(ITradeRepository tradeRepository)
+    {
+        _tradeRepository = tradeRepository;
+    }
+
+    public async Task<(bool IsDuplicate, Guid? ExistingTradeId)> CheckDuplicateAsync(Trade trade)
+    {
+        var existingTrade = await _tradeRepository.GetByTradeReferenceAsync(trade.TradeReference);
+
+        if (existingTrade != null && existingTrade.Id != trade.Id)
+        {
+            return (true, existingTrade.Id);
+        }
+
+        return (false, null);
+    }
+}

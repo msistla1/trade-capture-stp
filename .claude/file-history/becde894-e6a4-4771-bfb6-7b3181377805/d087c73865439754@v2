@@ -1,0 +1,29 @@
+using Shared.Contracts.Enums;
+using Shared.Contracts.ValueObjects;
+
+namespace Shared.Contracts.Entities;
+
+public record Fund
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string StrategyId { get; init; } = string.Empty;
+    public FundType Type { get; init; }
+    public Money NetAssetValue { get; init; } = new Money(0, "USD");
+    public DateTime InceptionDate { get; init; }
+    public FundStatus Status { get; init; }
+    public DateTime UpdatedAt { get; init; }
+
+    public IReadOnlyList<ComplianceRule> ComplianceRules { get; init; } = new List<ComplianceRule>();
+}
+
+public record Strategy
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public StrategyType Type { get; init; }
+    public DateTime CreatedAt { get; init; }
+
+    public IReadOnlyList<string> FundIds { get; init; } = new List<string>();
+}

@@ -1,0 +1,196 @@
+using Microsoft.Extensions.Logging;
+using Stateless;
+using TradeCaptureSystem.Domain.Common;
+using TradeCaptureSystem.Domain.Entities;
+using TradeCaptureSystem.Domain.Enums;
+using TradeCaptureSystem.Domain.Rules;
+
+namespace TradeCaptureSystem.Application.Services;
+
+/// <summary>
+/// Stateless state machine implementation for trade processing workflow
+/// </summary>
+public class TradeStateMachine : ITradeStateMachine
+{
+    private readonly StateMachine<TcrState, TcrTrigger> _machine;
+    private readonly Trade _trade;
+    private readonly IEnumerable<IValidationRule> _validationRules;
+    private readonly IDuplicateCheckService _duplicateCheckService;
+    private readonly ITradeRepository _tradeRepository;
+    private readonly ILogger<TradeStateMachine> _logger;
+
+    public TradeStateMachine(
+        Trade trade,
+        IEnumerable<IValidationRule> validationRules,
+        IDuplicateCheckService duplicateCheckService,
+        ITradeRepository tradeRepository,
+        ILogger<TradeStateMachine> logger)
+    {
+        _trade = trade;
+        _validationRules = validationRules;
+        _duplicateCheckService = duplicateCheckService;
+        _tradeRepository = tradeRepository;
+        _logger = logger;
+
+        _machine = new StateMachine<TcrState, TcrTrigger>(() => _trade.CurrentState, s => _trade.UpdateState(s));
+        ConfigureStateMachine();
+    }
+
+    private void ConfigureStateMachine()
+    {
+        // RECEIVED STATE
+        _machine.Configure(TcrState.Received)
+            .OnEntry(() => LogTcrReceived())
+            .Permit(TcrTrigger.StartValidation, TcrState.ValidationInProgress);
+
+        // VALIDATION IN PROGRESS STATE
+        _machine.Configure(TcrState.ValidationInProgress)
+            .OnEntry(() => StartValidation())
+            .Permit(TcrTrigger.ValidationSucceeded, TcrState.DuplicateCheckInProgress)
+            .Permit(TcrTrigger.ValidationFailed, TcrState.Rejected);
+
+        // DUPLICATE CHECK IN PROGRESS STATE
+        _machine.Configure(TcrState.DuplicateCheckInProgress)
+            .OnEntryAsync(async () => await StartDuplicateCheck())
+            .Permit(TcrTrigger.NoDuplicateFound, TcrState.ReadyForProcessing)
+            .Permit(TcrTrigger.DuplicateFound, TcrState.ReadyForProcessing);
+
+        // READY FOR PROCESSING STATE
+        _machine.Configure(TcrState.ReadyForProcessing)
+            .PermitIf(TcrTrigger.CreateNew, TcrState.Created, () => _trade.HasRequiredFields())
+            .PermitIf(TcrTrigger.UpdateExisting, TcrState.Updated, () => _trade.HasRequiredFields())
+            .Permit(TcrTrigger.RejectTrade, TcrState.Rejected);
+
+        // CREATED STATE
+        _machine.Configure(TcrState.Created)
+            .OnEntry(() => CreateTradeRecord())
+            .Permit(TcrTrigger.SaveSucceeded, TcrState.Saved)
+            .Permit(TcrTrigger.SaveFailed, TcrState.Failed);
+
+        // UPDATED STATE
+        _machine.Configure(TcrState.Updated)
+            .OnEntry(() => UpdateTradeRecord())
+            .Permit(TcrTrigger.SaveSucceeded, TcrState.Saved)
+            .Permit(TcrTrigger.SaveFailed, TcrState.Failed);
+
+        // REJECTED STATE
+        _machine.Configure(TcrState.Rejected)
+            .OnEntry(() => RejectTrade())
+            .Permit(TcrTrigger.SaveSucceeded, TcrState.Saved)
+            .Permit(TcrTrigger.SaveFailed, TcrState.Failed);
+
+        // SAVED STATE (Terminal)
+        _machine.Configure(TcrState.Saved)
+            .OnEntryAsync(async () => await PersistToDatabase());
+
+        // FAILED STATE (Terminal with retry)
+        _machine.Configure(TcrState.Failed)
+            .OnEntry(() => LogError())
+            .PermitIf(TcrTrigger.Retry, TcrState.Received, () => _trade.IsRetryable);
+    }
+
+    public async Task<Result> ProcessTradeAsync(Trade trade)
+    {
+        try
+        {
+            await _machine.FireAsync(TcrTrigger.StartValidation);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing trade {TradeId}", trade.TradeId);
+            return Result.Failure($"Failed to process trade: {ex.Message}");
+        }
+    }
+
+    public async Task FireAsync(TcrTrigger trigger)
+    {
+        await _machine.FireAsync(trigger);
+    }
+
+    public TcrState GetCurrentState()
+    {
+        return _machine.State;
+    }
+
+    private void LogTcrReceived()
+    {
+        _logger.LogInformation("Trade {TradeId} received at {Timestamp}", _trade.TradeId, DateTime.UtcNow);
+    }
+
+    private void StartValidation()
+    {
+        _logger.LogInformation("Starting validation for trade {TradeId}", _trade.TradeId);
+
+        foreach (var rule in _validationRules)
+        {
+            var result = rule.Validate(_trade);
+            if (result.IsFailure)
+            {
+                _logger.LogWarning("Validation failed for trade {TradeId}: {Error}", _trade.TradeId, result.Error);
+                _machine.Fire(TcrTrigger.ValidationFailed);
+                return;
+            }
+        }
+
+        _logger.LogInformation("Validation succeeded for trade {TradeId}", _trade.TradeId);
+        _machine.Fire(TcrTrigger.ValidationSucceeded);
+    }
+
+    private async Task StartDuplicateCheck()
+    {
+        _logger.LogInformation("Starting duplicate check for trade {TradeId}", _trade.TradeId);
+
+        var isDuplicate = await _duplicateCheckService.IsDuplicateAsync(_trade.TradeId);
+
+        if (isDuplicate)
+        {
+            _logger.LogWarning("Duplicate trade found: {TradeId}", _trade.TradeId);
+            _trade.MarkAsDuplicate();
+            await _machine.FireAsync(TcrTrigger.DuplicateFound);
+        }
+        else
+        {
+            _logger.LogInformation("No duplicate found for trade {TradeId}", _trade.TradeId);
+            await _machine.FireAsync(TcrTrigger.NoDuplicateFound);
+        }
+    }
+
+    private void CreateTradeRecord()
+    {
+        _logger.LogInformation("Creating new trade record for {TradeId}", _trade.TradeId);
+        _machine.Fire(TcrTrigger.SaveSucceeded);
+    }
+
+    private void UpdateTradeRecord()
+    {
+        _logger.LogInformation("Updating existing trade record for {TradeId}", _trade.TradeId);
+        _machine.Fire(TcrTrigger.SaveSucceeded);
+    }
+
+    private void RejectTrade()
+    {
+        _logger.LogWarning("Rejecting trade {TradeId}", _trade.TradeId);
+        _machine.Fire(TcrTrigger.SaveSucceeded);
+    }
+
+    private async Task PersistToDatabase()
+    {
+        try
+        {
+            _logger.LogInformation("Persisting trade {TradeId} to database", _trade.TradeId);
+            await _tradeRepository.SaveAsync(_trade);
+            _logger.LogInformation("Trade {TradeId} successfully saved", _trade.TradeId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist trade {TradeId}", _trade.TradeId);
+            _trade.UpdateState(TcrState.Failed);
+        }
+    }
+
+    private void LogError()
+    {
+        _logger.LogError("Trade {TradeId} processing failed. State: {State}", _trade.TradeId, _trade.CurrentState);
+    }
+}

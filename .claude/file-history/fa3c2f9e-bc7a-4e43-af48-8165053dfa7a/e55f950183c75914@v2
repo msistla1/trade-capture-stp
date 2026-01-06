@@ -1,0 +1,298 @@
+# Getting Started with Aurora
+
+## Running the Application
+
+### Step 1: Build the Solution
+```bash
+cd Aurora
+dotnet build
+```
+
+### Step 2: Run the API
+```bash
+cd Aurora.API
+dotnet run
+```
+
+You should see output similar to:
+```
+info: Aurora.Infrastructure.Data.SeedData[0]
+      Starting database seeding...
+info: Aurora.Infrastructure.Data.SeedData[0]
+      Database seeding completed successfully
+info: Aurora.Infrastructure.Data.SeedData[0]
+      Created 2 strategies, 5 funds, 4 securities, 8 compliance rules
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: https://localhost:5001
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5000
+```
+
+### Step 3: Open Swagger UI
+Navigate to: **http://localhost:5000** or **https://localhost:5001**
+
+## Sample API Call
+
+After the application starts, check the console logs for the GUIDs of seeded data. You'll see messages showing which entities were created.
+
+### Using Swagger UI
+
+1. Go to **http://localhost:5000**
+2. Find the **POST /api/Trade/book** endpoint
+3. Click "Try it out"
+4. Use this sample payload (replace GUIDs with actual values from your seed data):
+
+```json
+{
+  "tradeReference": "TEST-TRADE-001",
+  "securityId": "00000000-0000-0000-0000-000000000000",
+  "counterpartyId": "00000000-0000-0000-0000-000000000000",
+  "strategyId": "00000000-0000-0000-0000-000000000000",
+  "totalTradeAmount": 1500000,
+  "price": 150.00,
+  "tradeDate": "2026-01-02T10:00:00Z",
+  "settlementDate": "2026-01-05T10:00:00Z",
+  "marketType": 2,
+  "transactionType": "Buy",
+  "allocationMethodology": 1
+}
+```
+
+### Finding the Correct GUIDs
+
+After starting the app, look for log messages like:
+```
+Seeded Strategy: EQUITY with ID: 12345678-1234-1234-1234-123456789012
+```
+
+Or you can query the in-memory database by adding debug code, or use a database viewer if you switch to SQL Server/PostgreSQL.
+
+### Field Explanations
+
+- **tradeReference**: Unique identifier for the trade (your choice)
+- **securityId**: GUID of a security from seed data
+- **counterpartyId**: GUID of a counterparty from seed data
+- **strategyId**: GUID of a strategy (EQUITY or FI from seed data)
+- **totalTradeAmount**: Total amount to allocate across funds
+- **price**: Price per unit of the security
+- **tradeDate**: When the trade was executed
+- **settlementDate**: When the trade will settle
+- **marketType**: 1 = Primary, 2 = Secondary
+- **transactionType**: "Buy" or "Sell"
+- **allocationMethodology**: 1 = ProRata, 2 = Targeted, 3 = Custom
+
+### Sample Scenarios to Test
+
+#### Scenario 1: Pro-Rata Allocation
+```json
+{
+  "tradeReference": "PRO-RATA-001",
+  "totalTradeAmount": 2000000,
+  "allocationMethodology": 1
+}
+```
+Expected: Trade allocated proportionally across all eligible funds based on their capacity.
+
+#### Scenario 2: Targeted Allocation
+```json
+{
+  "tradeReference": "TARGETED-001",
+  "totalTradeAmount": 1500000,
+  "allocationMethodology": 2
+}
+```
+Expected: Funds with highest capacity filled first.
+
+#### Scenario 3: Compliance Failure
+Try booking a bond (Fixed Income security) to an equity strategy fund - should fail compliance.
+
+#### Scenario 4: Custom Allocation
+```json
+{
+  "tradeReference": "CUSTOM-001",
+  "totalTradeAmount": 2000000,
+  "allocationMethodology": 3,
+  "customAllocations": [
+    {
+      "fundId": "guid-of-fund-1",
+      "targetAmount": 1200000,
+      "targetPercentage": 0
+    },
+    {
+      "fundId": "guid-of-fund-2",
+      "targetAmount": 800000,
+      "targetPercentage": 0
+    }
+  ]
+}
+```
+
+## Running Tests
+
+```bash
+cd Aurora
+dotnet test
+```
+
+Expected output:
+```
+Test run for Aurora.Tests.dll (.NETCoreApp,Version=v10.0)
+Microsoft (R) Test Execution Command Line Tool Version 17.x
+
+Starting test execution, please wait...
+Passed!  - Failed:     0, Passed:     5, Skipped:     0, Total:     5
+```
+
+## Understanding the Response
+
+### Successful Response
+```json
+{
+  "success": true,
+  "tradeId": "abc123...",
+  "status": 6,
+  "message": "Trade successfully booked: $1,500,000.00 allocated across 3 fund(s)",
+  "complianceCheckSummary": {
+    "allPassed": true,
+    "totalRulesChecked": 12,
+    "rulesPassed": 12,
+    "rulesFailed": 0,
+    "hardLimitBreaches": 0,
+    "softLimitBreaches": 0,
+    "results": [],
+    "executionTime": "00:00:00.1234567"
+  },
+  "allocationSummary": {
+    "success": true,
+    "totalFunds": 3,
+    "fundsAllocated": 3,
+    "totalAllocated": 1500000,
+    "totalRequested": 1500000,
+    "allocations": [
+      {
+        "fundId": "fund-1-guid",
+        "fundCode": "FUND001",
+        "allocatedAmount": 500000,
+        "allocationPercentage": 33.33,
+        "availableCapacity": 600000,
+        "allocationReason": "Pro-Rata based on capacity (33.33%)"
+      }
+    ],
+    "executionTime": "00:00:00.0234567"
+  },
+  "errors": [],
+  "auditTrail": [
+    {
+      "module": "TradeBooking",
+      "action": "TradeCreated",
+      "details": "Trade created: TEST-TRADE-001",
+      "timestamp": "2026-01-02T..."
+    }
+  ]
+}
+```
+
+### Failed Compliance Response
+```json
+{
+  "success": false,
+  "tradeId": "abc123...",
+  "status": 3,
+  "message": "Trade booking failed: Compliance checks did not pass",
+  "complianceCheckSummary": {
+    "allPassed": false,
+    "totalRulesChecked": 12,
+    "rulesPassed": 10,
+    "rulesFailed": 2,
+    "hardLimitBreaches": 1,
+    "softLimitBreaches": 1,
+    "results": [
+      {
+        "fundId": "fund-guid",
+        "fundCode": "FUND004",
+        "passed": false,
+        "ruleCode": "FUND004-BONDS-ONLY",
+        "ruleName": "Bonds Only",
+        "severity": "Hard",
+        "calculatedCapacity": 0,
+        "message": "Asset restriction: Bonds Only"
+      }
+    ]
+  },
+  "errors": ["1 hard limit breach(es)"]
+}
+```
+
+## Troubleshooting
+
+### Issue: "Cannot find security/counterparty/strategy"
+**Solution**: Check the seed data logs to get the correct GUIDs, or use Swagger's schema to understand the format.
+
+### Issue: "Build failed"
+**Solution**: Ensure you have .NET 10.0 SDK installed:
+```bash
+dotnet --version
+```
+
+### Issue: "All tests failed"
+**Solution**: Rebuild the solution:
+```bash
+dotnet clean
+dotnet build
+dotnet test
+```
+
+### Issue: "Port already in use"
+**Solution**: Change ports in [Aurora.API/Properties/launchSettings.json](Aurora.API/Properties/launchSettings.json) or stop the conflicting process.
+
+## Next Steps
+
+1. **Explore the code structure** in the [README.md](README.md)
+2. **Modify compliance rules** in [SeedData.cs](Aurora.Infrastructure/Data/SeedData.cs)
+3. **Add new allocation strategies** in [Aurora.AllocationEngine/Strategies/](Aurora.AllocationEngine/Strategies/)
+4. **Test different scenarios** using Swagger UI
+5. **Switch to SQL Server or PostgreSQL** by updating [appsettings.json](Aurora.API/appsettings.json)
+
+## Common Workflows
+
+### Adding a New Compliance Rule
+
+1. Add rule in seed data or via direct DB insert:
+```csharp
+new ComplianceRule
+{
+    RuleCode = "CUSTOM-RULE-001",
+    RuleName = "My Custom Rule",
+    Description = "Description of the rule",
+    FundId = fundId,
+    RuleLevel = ComplianceRuleLevel.Issuer,
+    Severity = ComplianceRuleSeverity.Hard,
+    LimitType = LimitType.Max,
+    LimitValue = 10.0m,
+    RuleExpression = "sector != \"Restricted Sector\"",
+    IsActive = true
+}
+```
+
+### Testing Different Allocation Methodologies
+
+Use the same trade but change `allocationMethodology`:
+- `1` = Pro-Rata
+- `2` = Targeted
+- `3` = Custom (requires `customAllocations` array)
+
+### Viewing Audit Logs
+
+Audit logs are included in the response under `auditTrail`. They show:
+- Module that performed the action
+- Action type
+- Details
+- Timestamp
+
+## Support
+
+If you encounter issues:
+1. Check the console logs for detailed error messages
+2. Review the Swagger documentation
+3. Consult the [README.md](README.md) for architecture details
+4. Check test files for usage examples

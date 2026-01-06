@@ -1,0 +1,312 @@
+# Aurora Trade Allocation System
+
+A comprehensive trade booking system with integrated compliance checks and fund allocation for asset management firms.
+
+## Overview
+
+Aurora is a trade allocation system that:
+- Books trades across multiple funds within a strategy
+- Performs real-time compliance checks against fund-specific investment restrictions
+- Allocates trades using Pro-Rata, Targeted, or Custom allocation methodologies
+- Maintains comprehensive audit logs of all operations
+- Supports both Primary and Secondary market trades
+
+## Architecture
+
+### Projects
+
+- **Aurora.API** - REST API with Swagger documentation
+- **Aurora.Core** - Domain entities, DTOs, and interfaces
+- **Aurora.ComplianceEngine** - Rule-based compliance checking with expression evaluation
+- **Aurora.AllocationEngine** - Trade allocation strategies (Pro-Rata, Targeted, Custom)
+- **Aurora.TradeBooking** - Orchestration service coordinating compliance, allocation, and booking
+- **Aurora.Infrastructure** - EF Core, repositories, and database access
+- **Aurora.Tests** - Unit and integration tests
+
+### Key Features
+
+#### Compliance Engine
+- **Expression-based rules** - Store rules as expressions in database (using DynamicExpresso)
+- **Multi-level checks** - Trade, Asset, and Issuer level restrictions
+- **Hard and Soft limits** - Enforced vs. overridable restrictions
+- **Parallel execution** - All funds checked concurrently for performance
+- **Capacity calculation** - Determines available investment capacity per fund
+
+#### Allocation Engine
+- **Pro-Rata** - Distributes proportionally based on capacity
+- **Targeted** - Fills funds with highest capacity first
+- **Custom** - User-specified amounts per fund
+- **Compliance-aware** - Respects capacity limits from compliance checks
+
+#### Audit & Logging
+- Granular audit logs for all operations
+- Detailed compliance check results
+- Complete allocation history
+- Exportable audit trail
+
+## Quick Start
+
+### Prerequisites
+- .NET 10.0 SDK or later
+- Visual Studio Code (recommended) or Visual Studio
+
+### Running the Application
+
+1. **Navigate to the project directory:**
+   ```bash
+   cd Aurora
+   ```
+
+2. **Restore packages (if needed):**
+   ```bash
+   dotnet restore
+   ```
+
+3. **Run the API:**
+   ```bash
+   cd Aurora.API
+   dotnet run
+   ```
+
+4. **Access Swagger UI:**
+   Open your browser to: `https://localhost:5001` or `http://localhost:5000`
+
+   The Swagger UI provides interactive API documentation and testing capabilities.
+
+### Running Tests
+
+```bash
+cd Aurora
+dotnet test
+```
+
+##Usage Example
+
+### Booking a Trade
+
+**Endpoint:** `POST /api/Trade/book`
+
+**Sample Request:**
+```json
+{
+  "tradeReference": "TRD-2026-001",
+  "securityId": "guid-of-security",
+  "counterpartyId": "guid-of-counterparty",
+  "strategyId": "guid-of-strategy",
+  "totalTradeAmount": 2000000,
+  "price": 150.50,
+  "tradeDate": "2026-01-02T00:00:00Z",
+  "settlementDate": "2026-01-05T00:00:00Z",
+  "marketType": 2,
+  "transactionType": "Buy",
+  "allocationMethodology": 1
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "tradeId": "guid-of-created-trade",
+  "status": 6,
+  "message": "Trade successfully booked: $1,950,000.00 allocated across 3 fund(s)",
+  "complianceCheckSummary": {
+    "allPassed": true,
+    "totalRulesChecked": 15,
+    "rulesPassed": 15,
+    "rulesFailed": 0,
+    "hardLimitBreaches": 0,
+    "softLimitBreaches": 0
+  },
+  "allocationSummary": {
+    "success": true,
+    "totalFunds": 3,
+    "fundsAllocated": 3,
+    "totalAllocated": 1950000,
+    "totalRequested": 2000000
+  }
+}
+```
+
+## Configuration
+
+### Database Options
+
+The system supports three database providers (configured in `appsettings.json`):
+
+1. **In-Memory Database (Default)**
+   ```json
+   "UseInMemoryDatabase": true
+   ```
+   Perfect for development and testing.
+
+2. **SQL Server**
+   ```json
+   "UseInMemoryDatabase": false,
+   "DatabaseProvider": "SqlServer",
+   "ConnectionStrings": {
+     "DefaultConnection": "Server=localhost;Database=AuroraDb;Trusted_Connection=True;"
+   }
+   ```
+
+3. **PostgreSQL**
+   ```json
+   "UseInMemoryDatabase": false,
+   "DatabaseProvider": "PostgreSQL",
+   "ConnectionStrings": {
+     "PostgreSQL": "Host=localhost;Port=5432;Database=AuroraDb;Username=postgres;Password=your_password"
+   }
+   ```
+
+### Sample Data
+
+The system automatically seeds sample data in development mode:
+- 2 Strategies (Equity Growth, Fixed Income)
+- 5 Funds with varying NAV and cash positions
+- 4 Issuers (Apple, Microsoft, JPMorgan, US Treasury)
+- 4 Securities (stocks and bonds)
+- 3 Counterparties
+- 8 Compliance Rules with different restriction types
+- 2 Existing holdings for capacity testing
+
+## Compliance Rules
+
+### Rule Types
+
+**Trade Level:**
+- Transaction type restrictions
+- Counterparty restrictions
+- Market type limitations
+
+**Asset Level:**
+- Rating requirements (e.g., investment grade only)
+- Asset class restrictions
+- Security type limitations
+
+**Issuer Level:**
+- Concentration limits (e.g., max 5% NAV per issuer)
+- Country of risk restrictions
+- Sector/industry limitations
+
+### Sample Rules from Seed Data
+
+- **FUND001**: Max 5% NAV per issuer, Investment grade only
+- **FUND002**: Max 10% NAV per issuer, No banking sector (soft limit)
+- **FUND004**: Fixed income only, Max 15% NAV per issuer
+- **FUND005**: Government securities only
+
+## Allocation Methodologies
+
+### 1. Pro-Rata (AllocationMethodology = 1)
+Distributes proportionally based on each fund's available capacity.
+
+**Example:**
+- Total trade: $3M
+- Fund A capacity: $1M, Fund B capacity: $2M
+- Result: Fund A gets $1M, Fund B gets $2M
+
+### 2. Targeted (AllocationMethodology = 2)
+Fills funds with highest capacity first until trade is fully allocated.
+
+**Example:**
+- Total trade: $1.5M
+- Fund A capacity: $2M, Fund B capacity: $800K
+- Result: Fund A gets $1.5M, Fund B gets $0
+
+### 3. Custom (AllocationMethodology = 3)
+User specifies exact amounts or percentages for each fund.
+
+**Example:**
+```json
+{
+  "allocationMethodology": 3,
+  "customAllocations": [
+    {"fundId": "fund-a-guid", "targetAmount": 1200000},
+    {"fundId": "fund-b-guid", "targetAmount": 800000}
+  ]
+}
+```
+
+## Testing
+
+### Unit Tests
+Located in [Aurora.Tests/AllocationEngineTests.cs](Aurora.Tests/AllocationEngineTests.cs)
+
+Tests cover:
+- Pro-Rata allocation logic
+- Targeted allocation prioritization
+- Custom allocation respect for targets
+- Compliance capacity constraints
+- Failed compliance fund exclusion
+
+Run tests:
+```bash
+dotnet test
+```
+
+### Manual Testing via Swagger
+
+1. Start the API (`dotnet run` in Aurora.API)
+2. Navigate to Swagger UI (https://localhost:5001)
+3. Use the `/api/Trade/book` endpoint
+4. Reference GUIDs from seed data (check console logs on startup)
+
+## Performance Considerations
+
+- **Parallel compliance checks**: All funds checked concurrently
+- **In-memory rule compilation**: Rules compiled once and cached
+- **Bulk database operations**: Allocations and results saved in batches
+- **Target latency**: < 2 seconds for trades with 100+ funds
+
+## Project Structure
+
+```
+Aurora/
+├── Aurora.API/                 # REST API
+│   ├── Controllers/
+│   ├── Program.cs
+│   └── appsettings.json
+├── Aurora.Core/                # Domain layer
+│   ├── Entities/              # Domain models
+│   ├── DTOs/                  # Data transfer objects
+│   ├── Enums/                 # Enumerations
+│   └── Interfaces/            # Core interfaces
+├── Aurora.ComplianceEngine/    # Compliance checking
+│   ├── Interfaces/
+│   ├── Models/
+│   └── Services/
+├── Aurora.AllocationEngine/    # Allocation logic
+│   ├── Interfaces/
+│   ├── Models/
+│   ├── Services/
+│   └── Strategies/            # Allocation strategies
+├── Aurora.TradeBooking/        # Orchestration
+│   └── Services/
+├── Aurora.Infrastructure/      # Data access
+│   ├── Data/
+│   │   ├── AuroraDbContext.cs
+│   │   └── SeedData.cs
+│   ├── Repositories/
+│   └── Services/
+└── Aurora.Tests/              # Tests
+    └── AllocationEngineTests.cs
+```
+
+## Future Enhancements
+
+- Real-time fund holdings integration
+- Advanced rule expression builder UI
+- Partial fill support
+- Allocation rebalancing on compliance failures
+- Multi-currency support
+- Historical compliance reporting
+- Pre-trade compliance simulation
+- Integration with order management systems
+
+## License
+
+Proprietary - Aurora Team
+
+## Support
+
+For questions or issues, please contact the Aurora Team.

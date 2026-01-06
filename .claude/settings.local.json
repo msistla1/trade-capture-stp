@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(dotnet new:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\")",
+      "Bash(dotnet --version:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(del:*)",
+      "Bash(dotnet test:*)",
+      "Bash(code .)",
+      "Bash(dotnet run)",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet tool install:*)",
+      "Bash(dotnet ef migrations add:*)",
+      "Bash(dir:*)",
+      "Bash(rm:*)"
+    ]
+  }
+}

@@ -1,0 +1,55 @@
+using Shared.Contracts.Enums;
+
+namespace Shared.Contracts.DTOs;
+
+// Request to allocate trade across funds
+public record AllocationRequest(
+    string RequestId,
+    string SecurityId,
+    decimal TotalAmount,
+    decimal Price,
+    AllocationMethodology Methodology,
+    List<FundAllocationInput> Funds,
+    CustomAllocationRules? CustomRules = null
+);
+
+// Fund input for allocation
+public record FundAllocationInput(
+    string FundId,
+    decimal AvailableCapacity,
+    decimal? TargetAmount = null,  // For targeted allocation
+    decimal? Weight = null,         // For custom allocation
+    int Priority = 0                // For conflict resolution
+);
+
+// Custom allocation rules
+public record CustomAllocationRules(
+    Dictionary<string, decimal> FundWeights,
+    bool AllowPartialAllocation = true
+);
+
+// Response from allocation
+public record AllocationResponse(
+    string RequestId,
+    List<FundAllocation> Allocations,
+    AllocationSummary Summary
+);
+
+// Allocation result for a single fund
+public record FundAllocation(
+    string FundId,
+    decimal AllocatedAmount,
+    decimal AllocatedShares,
+    decimal PercentageOfTotal,
+    AllocationStatus Status,
+    string? Reason = null
+);
+
+// Summary of allocation
+public record AllocationSummary(
+    decimal TotalRequested,
+    decimal TotalAllocated,
+    decimal UnallocatedAmount,
+    bool FullyAllocated,
+    List<string> Warnings
+);

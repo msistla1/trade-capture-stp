@@ -1,0 +1,13 @@
+namespace Aurora.Core.Entities;
+
+public class AuditLog : BaseEntity
+{
+    public Guid? TradeId { get; set; }
+    public string EntityType { get; set; } = string.Empty; // Trade, Fund, ComplianceCheck, Allocation
+    public string EntityId { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public string Module { get; set; } = string.Empty; // ComplianceEngine, AllocationEngine, TradeBooking
+    public string Details { get; set; } = string.Empty; // JSON details
+    public string? UserId { get; set; }
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}

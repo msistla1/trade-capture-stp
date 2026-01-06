@@ -1,0 +1,37 @@
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Entities;
+
+namespace Compliance.Domain.RuleEngine;
+
+public interface IRuleEvaluator
+{
+    Task<RuleEvaluationResult> EvaluateAsync(
+        ComplianceRule rule,
+        RuleContext context);
+
+    Task<decimal> CalculateCapacityAsync(
+        ComplianceRule rule,
+        RuleContext context);
+}
+
+public record RuleContext(
+    Fund Fund,
+    Security Security,
+    TradeContext Trade,
+    IPortfolioData Portfolio
+);
+
+public record TradeContext(
+    decimal Amount,
+    decimal Price,
+    DateTime TradeDate,
+    string CounterpartyId
+);
+
+public interface IPortfolioData
+{
+    Task<decimal> GetIssuerExposureAsync(string fundId, string issuerId);
+    Task<decimal> GetSecurityPositionAsync(string fundId, string securityId);
+    Task<decimal> GetSectorExposureAsync(string fundId, string sector);
+    Task<decimal> GetCounterpartyExposureAsync(string fundId, string counterpartyId);
+}

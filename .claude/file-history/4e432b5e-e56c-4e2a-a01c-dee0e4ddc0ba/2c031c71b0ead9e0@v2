@@ -1,0 +1,258 @@
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Application.StateMachine;
+using TradeWorkflow.Domain.Entities;
+using TradeWorkflow.Domain.Enums;
+using TradeWorkflow.Tests.Builders;
+using Xunit;
+
+namespace TradeWorkflow.Tests.Application;
+
+public class TradeStateMachineTests
+{
+    private readonly Mock<IValidationService> _validationServiceMock;
+    private readonly Mock<IDuplicateCheckService> _duplicateCheckServiceMock;
+    private readonly Mock<ITradeProcessingService> _tradeProcessingServiceMock;
+    private readonly Mock<ITradeRepository> _tradeRepositoryMock;
+    private readonly Mock<ITradeHistoryRepository> _tradeHistoryRepositoryMock;
+    private readonly Mock<ILogger<TradeStateMachine>> _loggerMock;
+
+    public TradeStateMachineTests()
+    {
+        _validationServiceMock = new Mock<IValidationService>();
+        _duplicateCheckServiceMock = new Mock<IDuplicateCheckService>();
+        _tradeProcessingServiceMock = new Mock<ITradeProcessingService>();
+        _tradeRepositoryMock = new Mock<ITradeRepository>();
+        _tradeHistoryRepositoryMock = new Mock<ITradeHistoryRepository>();
+        _loggerMock = new Mock<ILogger<TradeStateMachine>>();
+    }
+
+    private TradeStateMachine CreateStateMachine(Trade trade)
+    {
+        return new TradeStateMachine(
+            trade,
+            _validationServiceMock.Object,
+            _duplicateCheckServiceMock.Object,
+            _tradeProcessingServiceMock.Object,
+            _tradeRepositoryMock.Object,
+            _tradeHistoryRepositoryMock.Object,
+            _loggerMock.Object);
+    }
+
+    [Fact]
+    public async Task FireAsync_FromReceived_ToValidationInProgress_ShouldSucceed()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Received)
+            .Build();
+
+        _validationServiceMock.Setup(x => x.ValidateTradeAsync(trade))
+            .ReturnsAsync((true, null));
+        _duplicateCheckServiceMock.Setup(x => x.CheckDuplicateAsync(trade))
+            .ReturnsAsync((false, null));
+        _tradeHistoryRepositoryMock.Setup(x => x.CreateAsync(It.IsAny<TradeHistory>()))
+            .Returns(Task.CompletedTask);
+        _tradeRepositoryMock.Setup(x => x.SaveChangesAsync())
+            .Returns(Task.CompletedTask);
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var newState = await stateMachine.FireAsync(TcrTrigger.StartValidation);
+
+        // Assert
+        newState.Should().Be(TcrState.ReadyForProcessing);
+        trade.CurrentState.Should().Be(TcrState.ReadyForProcessing);
+    }
+
+    [Fact]
+    public async Task FireAsync_ValidationFailed_ShouldTransitionToRejected()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Received)
+            .Build();
+
+        _validationServiceMock.Setup(x => x.ValidateTradeAsync(trade))
+            .ReturnsAsync((false, "Invalid trade data"));
+        _tradeProcessingServiceMock.Setup(x => x.RejectTradeAsync(trade, It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+        _tradeProcessingServiceMock.Setup(x => x.PersistToDatabaseAsync(trade))
+            .Returns(Task.CompletedTask);
+        _tradeHistoryRepositoryMock.Setup(x => x.CreateAsync(It.IsAny<TradeHistory>()))
+            .Returns(Task.CompletedTask);
+        _tradeRepositoryMock.Setup(x => x.SaveChangesAsync())
+            .Returns(Task.CompletedTask);
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        await stateMachine.FireAsync(TcrTrigger.StartValidation);
+
+        // Assert
+        trade.CurrentState.Should().Be(TcrState.Saved);
+        trade.IsValidated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanFire_ValidTransition_ShouldReturnTrue()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Received)
+            .Build();
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var canFire = stateMachine.CanFire(TcrTrigger.StartValidation);
+
+        // Assert
+        canFire.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanFire_InvalidTransition_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Received)
+            .Build();
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var canFire = stateMachine.CanFire(TcrTrigger.CreateNew);
+
+        // Assert
+        canFire.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task FireAsync_InvalidTransition_ShouldThrowException()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Received)
+            .Build();
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        Func<Task> act = async () => await stateMachine.FireAsync(TcrTrigger.CreateNew);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Cannot fire trigger 'CreateNew' from state 'Received'");
+    }
+
+    [Fact]
+    public async Task FireAsync_CreateNew_WhenFieldsValid_ShouldSucceed()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.ReadyForProcessing)
+            .Build();
+
+        _tradeProcessingServiceMock.Setup(x => x.CreateTradeRecordAsync(trade))
+            .Returns(Task.CompletedTask);
+        _tradeProcessingServiceMock.Setup(x => x.PersistToDatabaseAsync(trade))
+            .Returns(Task.CompletedTask);
+        _tradeHistoryRepositoryMock.Setup(x => x.CreateAsync(It.IsAny<TradeHistory>()))
+            .Returns(Task.CompletedTask);
+        _tradeRepositoryMock.Setup(x => x.SaveChangesAsync())
+            .Returns(Task.CompletedTask);
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var newState = await stateMachine.FireAsync(TcrTrigger.CreateNew);
+
+        // Assert
+        newState.Should().Be(TcrState.Saved);
+        _tradeProcessingServiceMock.Verify(x => x.CreateTradeRecordAsync(trade), Times.Once);
+    }
+
+    [Fact]
+    public void PermittedTriggers_FromReceived_ShouldOnlyIncludeStartValidation()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Received)
+            .Build();
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var permittedTriggers = stateMachine.PermittedTriggers;
+
+        // Assert
+        permittedTriggers.Should().ContainSingle()
+            .Which.Should().Be(TcrTrigger.StartValidation);
+    }
+
+    [Fact]
+    public void PermittedTriggers_FromReadyForProcessing_ShouldIncludeCreateUpdateReject()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.ReadyForProcessing)
+            .Build();
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var permittedTriggers = stateMachine.PermittedTriggers.ToList();
+
+        // Assert
+        permittedTriggers.Should().Contain(TcrTrigger.CreateNew);
+        permittedTriggers.Should().Contain(TcrTrigger.UpdateExisting);
+        permittedTriggers.Should().Contain(TcrTrigger.RejectTrade);
+    }
+
+    [Fact]
+    public async Task FireAsync_Retry_WhenRetryable_ShouldTransitionToReceived()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Failed)
+            .WithRetryCount(1)
+            .WithMaxRetries(3)
+            .Build();
+
+        _tradeHistoryRepositoryMock.Setup(x => x.CreateAsync(It.IsAny<TradeHistory>()))
+            .Returns(Task.CompletedTask);
+        _tradeRepositoryMock.Setup(x => x.SaveChangesAsync())
+            .Returns(Task.CompletedTask);
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var newState = await stateMachine.FireAsync(TcrTrigger.Retry);
+
+        // Assert
+        newState.Should().Be(TcrState.Received);
+    }
+
+    [Fact]
+    public void CanFire_Retry_WhenNotRetryable_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithState(TcrState.Failed)
+            .WithRetryCount(3)
+            .WithMaxRetries(3)
+            .Build();
+
+        var stateMachine = CreateStateMachine(trade);
+
+        // Act
+        var canFire = stateMachine.CanFire(TcrTrigger.Retry);
+
+        // Assert
+        canFire.Should().BeFalse();
+    }
+}

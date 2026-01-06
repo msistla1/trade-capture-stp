@@ -1,0 +1,40 @@
+using Shared.Contracts.Enums;
+
+namespace Shared.Contracts.DTOs;
+
+// Request to book a trade
+public record TradeBookingRequest(
+    string RequestId,
+    TradeDetails Trade,
+    List<FundAllocation> Allocations,
+    string UserId,
+    bool UserApproved = false  // For partial failure scenarios
+);
+
+// Trade details
+public record TradeDetails(
+    string SecurityId,
+    string CounterpartyId,
+    decimal TotalAmount,
+    decimal Price,
+    DateTime TradeDate,
+    DateTime SettlementDate,
+    string TradeType,
+    string Currency = "USD"
+);
+
+// Response from trade booking
+public record TradeBookingResponse(
+    string TradeId,
+    DateTime BookedAt,
+    List<AllocationConfirmation> Confirmations,
+    BookingStatus Status
+);
+
+// Confirmation for a single allocation
+public record AllocationConfirmation(
+    string AllocationId,
+    string FundId,
+    decimal Amount,
+    string ConfirmationNumber
+);

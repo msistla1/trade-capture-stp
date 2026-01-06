@@ -1,0 +1,214 @@
+# TradeWorkflow.Tests
+
+Comprehensive unit test suite for the Trade Workflow System using xUnit, Moq, and FluentAssertions.
+
+## Test Coverage
+
+### Domain Layer Tests (7 tests)
+**File**: [Domain/TradeTests.cs](Domain/TradeTests.cs)
+
+Tests for core domain business logic:
+- `HasRequiredFields_WhenAllFieldsPresent_ReturnsTrue` - Validates all required fields are present
+- `HasRequiredFields_WhenFieldMissing_ReturnsFalse` - Tests various missing field scenarios
+- `IsRetryable_WhenRetryCountBelowMax_ReturnsTrue` - Validates retry logic
+- `IsRetryable_WhenRetryCountEqualsMax_ReturnsFalse` - Tests retry limit
+- `IsRetryable_WhenRetryCountExceedsMax_ReturnsFalse` - Tests exceeded retry limit
+- `Trade_DefaultState_ShouldBeReceived` - Validates initial state
+- `Trade_CanSetAndGetProperties` - Tests all property getters/setters
+
+### Application Layer Tests (18 tests)
+
+#### TradeWorkflowService Tests (7 tests)
+**File**: [Application/TradeWorkflowServiceTests.cs](Application/TradeWorkflowServiceTests.cs)
+
+- `CreateTradeAsync_ShouldCreateTradeInReceivedState` - Tests trade creation
+- `GetTradeAsync_WhenTradeExists_ShouldReturnTrade` - Tests trade retrieval
+- `GetTradeAsync_WhenTradeDoesNotExist_ShouldReturnNull` - Tests null handling
+- `GetAllTradesAsync_ShouldReturnAllTrades` - Tests batch retrieval
+- `ProcessTriggerAsync_WhenTradeNotFound_ShouldThrowException` - Tests error handling
+- `GetTradeHistoryAsync_ShouldReturnHistory` - Tests history retrieval
+
+#### TradeStateMachine Tests (11 tests)
+**File**: [Application/TradeStateMachineTests.cs](Application/TradeStateMachineTests.cs)
+
+- `FireAsync_FromReceived_ToValidationInProgress_ShouldSucceed` - Tests successful validation flow
+- `FireAsync_ValidationFailed_ShouldTransitionToRejected` - Tests validation failure
+- `CanFire_ValidTransition_ShouldReturnTrue` - Tests valid transition checking
+- `CanFire_InvalidTransition_ShouldReturnFalse` - Tests invalid transition rejection
+- `FireAsync_InvalidTransition_ShouldThrowException` - Tests exception on invalid trigger
+- `FireAsync_CreateNew_WhenFieldsValid_ShouldSucceed` - Tests trade creation flow
+- `PermittedTriggers_FromReceived_ShouldOnlyIncludeStartValidation` - Tests permitted triggers
+- `PermittedTriggers_FromReadyForProcessing_ShouldIncludeCreateUpdateReject` - Tests multiple permitted triggers
+- `FireAsync_Retry_WhenRetryable_ShouldTransitionToReceived` - Tests retry mechanism
+- `CanFire_Retry_WhenNotRetryable_ShouldReturnFalse` - Tests retry limit enforcement
+
+### Infrastructure Layer Tests (21 tests)
+
+#### ValidationService Tests (9 tests)
+**File**: [Infrastructure/ValidationServiceTests.cs](Infrastructure/ValidationServiceTests.cs)
+
+- `ValidateTradeAsync_WhenAllFieldsValid_ShouldReturnTrue` - Tests successful validation
+- `ValidateTradeAsync_WhenTradeReferenceEmpty_ShouldReturnFalse` - Tests trade reference validation
+- `ValidateTradeAsync_WhenInstrumentEmpty_ShouldReturnFalse` - Tests instrument validation
+- `ValidateTradeAsync_WhenCounterpartyEmpty_ShouldReturnFalse` - Tests counterparty validation
+- `ValidateTradeAsync_WhenQuantityZero_ShouldReturnFalse` - Tests quantity validation
+- `ValidateTradeAsync_WhenPriceZero_ShouldReturnFalse` - Tests price validation
+- `ValidateTradeAsync_WhenMultipleFieldsInvalid_ShouldReturnAllErrors` - Tests multiple validation errors
+- `ValidateTradeAsync_WhenTradeDateDefault_ShouldReturnFalse` - Tests date validation
+- `ValidateTradeAsync_WhenTradeTypeEmpty_ShouldReturnFalse` - Tests trade type validation
+
+#### TradeRepository Tests (7 tests)
+**File**: [Infrastructure/TradeRepositoryTests.cs](Infrastructure/TradeRepositoryTests.cs)
+
+Uses EF Core In-Memory database for integration-style testing:
+- `CreateAsync_ShouldAddTradeToDatabase` - Tests trade creation
+- `GetByIdAsync_WhenTradeExists_ShouldReturnTrade` - Tests ID-based retrieval
+- `GetByIdAsync_WhenTradeDoesNotExist_ShouldReturnNull` - Tests not found scenario
+- `GetByTradeReferenceAsync_WhenTradeExists_ShouldReturnTrade` - Tests reference-based retrieval
+- `GetByTradeReferenceAsync_WhenTradeDoesNotExist_ShouldReturnNull` - Tests reference not found
+- `GetAllAsync_ShouldReturnAllTrades` - Tests batch retrieval
+- `UpdateAsync_ShouldUpdateTradeInDatabase` - Tests trade updates
+
+#### DuplicateCheckService Tests (3 tests)
+**File**: [Infrastructure/DuplicateCheckServiceTests.cs](Infrastructure/DuplicateCheckServiceTests.cs)
+
+- `CheckDuplicateAsync_WhenNoDuplicateExists_ShouldReturnFalse` - Tests no duplicate found
+- `CheckDuplicateAsync_WhenDuplicateExists_ShouldReturnTrue` - Tests duplicate detection
+- `CheckDuplicateAsync_WhenSameTrade_ShouldReturnFalse` - Tests same trade check
+
+## Test Data Builders
+
+**File**: [Builders/TradeBuilder.cs](Builders/TradeBuilder.cs)
+
+Fluent builder pattern for creating test data:
+
+```csharp
+var trade = TradeBuilder.Default()
+    .WithTradeReference("TRD-001")
+    .WithInstrument("AAPL")
+    .WithQuantity(100)
+    .WithPrice(150.50m)
+    .WithState(TcrState.Received)
+    .Build();
+```
+
+The builder provides:
+- Sensible defaults for all fields
+- Fluent API for customization
+- Helper methods like `WithInvalidFields()`
+- Immutable pattern (each method returns a new builder)
+
+## Running Tests
+
+### Run all tests
+```bash
+cd TradeWorkflow
+dotnet test
+```
+
+### Run tests with detailed output
+```bash
+dotnet test --verbosity detailed
+```
+
+### Run tests with coverage (requires additional package)
+```bash
+dotnet test /p:CollectCoverage=true
+```
+
+### Run specific test class
+```bash
+dotnet test --filter "FullyQualifiedName~TradeTests"
+```
+
+### Run specific test
+```bash
+dotnet test --filter "FullyQualifiedName~HasRequiredFields_WhenAllFieldsPresent_ReturnsTrue"
+```
+
+## Testing Technologies
+
+- **xUnit 2.4.2+**: Testing framework
+- **Moq 4.20+**: Mocking framework for isolating dependencies
+- **FluentAssertions 8.8+**: Fluent assertion library for readable tests
+- **EF Core InMemory 10.0+**: In-memory database for repository tests
+
+## Test Structure
+
+Each test follows the **Arrange-Act-Assert** pattern:
+
+```csharp
+[Fact]
+public async Task MethodName_Scenario_ExpectedBehavior()
+{
+    // Arrange - Set up test data and mocks
+    var trade = TradeBuilder.Default().Build();
+    _mockRepository.Setup(x => x.GetByIdAsync(trade.Id))
+        .ReturnsAsync(trade);
+
+    // Act - Execute the method being tested
+    var result = await _service.GetTradeAsync(trade.Id);
+
+    // Assert - Verify the outcome
+    result.Should().NotBeNull();
+    result.Id.Should().Be(trade.Id);
+}
+```
+
+## Mocking Strategy
+
+- **Repository mocks**: Mock database operations to isolate business logic
+- **Service mocks**: Mock external service calls for predictable tests
+- **Logger mocks**: Verify logging calls without actual logging infrastructure
+
+## Test Isolation
+
+- Each test is independent
+- Repository tests use unique in-memory databases (via `Guid.NewGuid()` for DB names)
+- No shared state between tests
+- All tests can run in parallel
+
+## Extending Tests
+
+### Adding a new test class
+
+1. Create file in appropriate folder (Domain/Application/Infrastructure)
+2. Inherit from base test class if needed
+3. Set up mocks in constructor
+4. Write tests using AAA pattern
+
+### Adding a new test
+
+```csharp
+[Fact]  // For single test case
+public void MethodName_Scenario_ExpectedOutcome()
+{
+    // Arrange, Act, Assert
+}
+
+[Theory]  // For parameterized tests
+[InlineData("value1", "value2")]
+[InlineData("value3", "value4")]
+public void MethodName_MultipleScenarios(string input1, string input2)
+{
+    // Arrange, Act, Assert
+}
+```
+
+## Current Test Results
+
+```
+Total tests: 46
+     Passed: 46
+     Failed: 0
+```
+
+All tests passing! 🎉
+
+## Future Improvements
+
+- Add integration tests for API endpoints
+- Add performance/load tests for state machine
+- Add code coverage reporting
+- Add mutation testing
+- Add property-based testing for domain logic

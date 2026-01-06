@@ -1,0 +1,8 @@
+using TradeWorkflow.Domain.Enums;
+
+namespace TradeWorkflow.API.Models;
+
+public class ProcessTriggerRequest
+{
+    public TcrTrigger Trigger { get; set; }
+}

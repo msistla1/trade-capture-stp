@@ -1,0 +1,27 @@
+using Shared.Contracts.Enums;
+
+namespace Shared.Contracts.Entities;
+
+public record Security
+{
+    public string Id { get; init; } = string.Empty;
+    public string Ticker { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public SecurityType Type { get; init; }
+    public string IssuerId { get; init; } = string.Empty;
+    public string? CreditRating { get; init; }
+    public string Currency { get; init; } = "USD";
+    public decimal? CouponRate { get; init; }
+    public DateTime? MaturityDate { get; init; }
+    public DateTime UpdatedAt { get; init; }
+}
+
+public record Counterparty
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string CounterpartyType { get; init; } = string.Empty;
+    public string? CreditRating { get; init; }
+    public bool IsActive { get; init; }
+    public DateTime UpdatedAt { get; init; }
+}

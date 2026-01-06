@@ -1,0 +1,112 @@
+using Aurora.AllocationEngine.Interfaces;
+using Aurora.AllocationEngine.Services;
+using Aurora.ComplianceEngine.Interfaces;
+using Aurora.ComplianceEngine.Services;
+using Aurora.Core.Entities;
+using Aurora.Core.Interfaces;
+using Aurora.Infrastructure.Data;
+using Aurora.Infrastructure.Repositories;
+using Aurora.Infrastructure.Services;
+using Aurora.TradeBooking.Services;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container
+builder.Services.AddControllers();
+
+// Configure Swagger/OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Configure Database (In-Memory for testing, can be swapped for SQL Server or PostgreSQL)
+var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", true);
+
+if (useInMemoryDatabase)
+{
+    builder.Services.AddDbContext<AuroraDbContext>(options =>
+        options.UseInMemoryDatabase("AuroraDb"));
+}
+else
+{
+    var databaseProvider = builder.Configuration.GetValue<string>("DatabaseProvider", "SqlServer");
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+    if (databaseProvider == "PostgreSQL")
+    {
+        builder.Services.AddDbContext<AuroraDbContext>(options =>
+            options.UseNpgsql(connectionString));
+    }
+    else
+    {
+        builder.Services.AddDbContext<AuroraDbContext>(options =>
+            options.UseSqlServer(connectionString));
+    }
+}
+
+// Register Repositories
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+
+// Register Services
+builder.Services.AddScoped<IAuditLogger, AuditLoggerService>();
+builder.Services.AddScoped<IComplianceEngine, ComplianceEngineService>();
+builder.Services.AddScoped<IAllocationEngine, AllocationEngineService>();
+builder.Services.AddScoped<TradeBookingService>();
+
+// Add CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
+
+// Add logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
+var app = builder.Build();
+
+// Seed data in development
+if (app.Environment.IsDevelopment())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var context = scope.ServiceProvider.GetRequiredService<AuroraDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+        try
+        {
+            await SeedData.SeedAsync(context, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while seeding the database");
+        }
+    }
+}
+
+// Configure the HTTP request pipeline
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Aurora API V1");
+        c.RoutePrefix = string.Empty; // Swagger UI at root
+    });
+}
+
+app.UseHttpsRedirection();
+app.UseCors("AllowAll");
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+
+// Public partial class for testing
+public partial class Program { }

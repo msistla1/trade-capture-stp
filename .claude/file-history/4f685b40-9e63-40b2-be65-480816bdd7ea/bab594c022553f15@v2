@@ -1,0 +1,72 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using TradeCaptureSystem.Application.Commands;
+using TradeCaptureSystem.Application.Services;
+using TradeCaptureSystem.Domain.Rules;
+using TradeCaptureSystem.Infrastructure.FileWatcher;
+using TradeCaptureSystem.Infrastructure.Persistence;
+using TradeCaptureSystem.Infrastructure.Repositories;
+using TradeCaptureSystem.Infrastructure.Services;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+// Add configuration
+builder.Configuration
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
+// Add DbContext
+builder.Services.AddDbContext<TradeCaptureDbContext>(options =>
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("TradeCaptureDb"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure()
+    )
+);
+
+// Add MediatR for CQRS
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(ProcessTradeCommand).Assembly);
+});
+
+// Register repositories
+builder.Services.AddScoped<ITradeRepository, TradeRepository>();
+
+// Register services
+builder.Services.AddScoped<IDuplicateCheckService, DuplicateCheckService>();
+
+// Register validation rules
+builder.Services.AddScoped<IValidationRule, RequiredFieldsRule>();
+builder.Services.AddScoped<IValidationRule, TradeDateRule>();
+
+// Configure file watcher options
+builder.Services.Configure<FileWatcherOptions>(
+    builder.Configuration.GetSection(FileWatcherOptions.SectionName));
+
+// Register file watcher background service
+builder.Services.AddHostedService<TradeFileWatcherService>();
+
+// Build and run the host
+var host = builder.Build();
+
+// Ensure database is created
+using (var scope = host.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<TradeCaptureDbContext>();
+        context.Database.EnsureCreated();
+        Console.WriteLine("Database initialized successfully");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"An error occurred while creating the database: {ex.Message}");
+    }
+}
+
+Console.WriteLine("Trade Capture System Starting...");
+await host.RunAsync();

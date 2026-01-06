@@ -1,0 +1,158 @@
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Application.Services;
+using TradeWorkflow.Application.StateMachine;
+using TradeWorkflow.Domain.Entities;
+using TradeWorkflow.Domain.Enums;
+using TradeWorkflow.Tests.Builders;
+using Xunit;
+
+namespace TradeWorkflow.Tests.Application;
+
+public class TradeWorkflowServiceTests
+{
+    private readonly Mock<ITradeRepository> _tradeRepositoryMock;
+    private readonly Mock<ITradeHistoryRepository> _tradeHistoryRepositoryMock;
+    private readonly Mock<IValidationService> _validationServiceMock;
+    private readonly Mock<IDuplicateCheckService> _duplicateCheckServiceMock;
+    private readonly Mock<ITradeProcessingService> _tradeProcessingServiceMock;
+    private readonly Mock<ILogger<TradeStateMachine>> _stateMachineLoggerMock;
+    private readonly TradeWorkflowService _service;
+
+    public TradeWorkflowServiceTests()
+    {
+        _tradeRepositoryMock = new Mock<ITradeRepository>();
+        _tradeHistoryRepositoryMock = new Mock<ITradeHistoryRepository>();
+        _validationServiceMock = new Mock<IValidationService>();
+        _duplicateCheckServiceMock = new Mock<IDuplicateCheckService>();
+        _tradeProcessingServiceMock = new Mock<ITradeProcessingService>();
+        _stateMachineLoggerMock = new Mock<ILogger<TradeStateMachine>>();
+
+        _service = new TradeWorkflowService(
+            _tradeRepositoryMock.Object,
+            _tradeHistoryRepositoryMock.Object,
+            _validationServiceMock.Object,
+            _duplicateCheckServiceMock.Object,
+            _tradeProcessingServiceMock.Object,
+            _stateMachineLoggerMock.Object);
+    }
+
+    [Fact]
+    public async Task CreateTradeAsync_ShouldCreateTradeInReceivedState()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default().Build();
+        _tradeRepositoryMock.Setup(x => x.CreateAsync(It.IsAny<Trade>()))
+            .ReturnsAsync((Trade t) => t);
+        _tradeRepositoryMock.Setup(x => x.SaveChangesAsync())
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.CreateTradeAsync(trade);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.CurrentState.Should().Be(TcrState.Received);
+        result.Id.Should().NotBeEmpty();
+        _tradeRepositoryMock.Verify(x => x.CreateAsync(It.IsAny<Trade>()), Times.Once);
+        _tradeRepositoryMock.Verify(x => x.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTradeAsync_WhenTradeExists_ShouldReturnTrade()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default().Build();
+        _tradeRepositoryMock.Setup(x => x.GetByIdAsync(trade.Id))
+            .ReturnsAsync(trade);
+
+        // Act
+        var result = await _service.GetTradeAsync(trade.Id);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().BeEquivalentTo(trade);
+        _tradeRepositoryMock.Verify(x => x.GetByIdAsync(trade.Id), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTradeAsync_WhenTradeDoesNotExist_ShouldReturnNull()
+    {
+        // Arrange
+        var tradeId = Guid.NewGuid();
+        _tradeRepositoryMock.Setup(x => x.GetByIdAsync(tradeId))
+            .ReturnsAsync((Trade?)null);
+
+        // Act
+        var result = await _service.GetTradeAsync(tradeId);
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAllTradesAsync_ShouldReturnAllTrades()
+    {
+        // Arrange
+        var trades = new List<Trade>
+        {
+            TradeBuilder.Default().WithId(Guid.NewGuid()).Build(),
+            TradeBuilder.Default().WithId(Guid.NewGuid()).Build()
+        };
+        _tradeRepositoryMock.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(trades);
+
+        // Act
+        var result = await _service.GetAllTradesAsync();
+
+        // Assert
+        result.Should().HaveCount(2);
+        _tradeRepositoryMock.Verify(x => x.GetAllAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessTriggerAsync_WhenTradeNotFound_ShouldThrowException()
+    {
+        // Arrange
+        var tradeId = Guid.NewGuid();
+        _tradeRepositoryMock.Setup(x => x.GetByIdAsync(tradeId))
+            .ReturnsAsync((Trade?)null);
+
+        // Act
+        Func<Task> act = async () => await _service.ProcessTriggerAsync(tradeId, TcrTrigger.StartValidation);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"Trade with ID {tradeId} not found");
+    }
+
+    [Fact]
+    public async Task GetTradeHistoryAsync_ShouldReturnHistory()
+    {
+        // Arrange
+        var tradeId = Guid.NewGuid();
+        var history = new List<TradeHistory>
+        {
+            new TradeHistory
+            {
+                Id = Guid.NewGuid(),
+                TradeId = tradeId,
+                FromState = TcrState.Received,
+                ToState = TcrState.ValidationInProgress,
+                Trigger = TcrTrigger.StartValidation,
+                TransitionedAt = DateTime.UtcNow
+            }
+        };
+        _tradeHistoryRepositoryMock.Setup(x => x.GetByTradeIdAsync(tradeId))
+            .ReturnsAsync(history);
+
+        // Act
+        var result = await _service.GetTradeHistoryAsync(tradeId);
+
+        // Assert
+        result.Should().HaveCount(1);
+        result.First().TradeId.Should().Be(tradeId);
+    }
+}

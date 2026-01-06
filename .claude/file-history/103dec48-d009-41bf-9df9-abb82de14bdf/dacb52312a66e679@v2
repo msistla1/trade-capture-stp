@@ -1,0 +1,37 @@
+using Aurora.Core.Entities;
+
+namespace Aurora.ComplianceEngine.Models;
+
+public class ComplianceCheckRequest
+{
+    public Trade Trade { get; set; } = null!;
+    public List<Fund> Funds { get; set; } = new List<Fund>();
+    public Security Security { get; set; } = null!;
+    public Issuer Issuer { get; set; } = null!;
+}
+
+public class ComplianceCheckResponse
+{
+    public bool AllPassed { get; set; }
+    public List<FundComplianceResult> FundResults { get; set; } = new List<FundComplianceResult>();
+    public TimeSpan ExecutionTime { get; set; }
+}
+
+public class FundComplianceResult
+{
+    public Fund Fund { get; set; } = null!;
+    public bool Passed { get; set; }
+    public decimal AvailableCapacity { get; set; }
+    public List<RuleEvaluationResult> RuleResults { get; set; } = new List<RuleEvaluationResult>();
+}
+
+public class RuleEvaluationResult
+{
+    public ComplianceRule Rule { get; set; } = null!;
+    public bool Passed { get; set; }
+    public decimal? CurrentValue { get; set; }
+    public decimal? LimitValue { get; set; }
+    public decimal? CalculatedCapacity { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string? DetailedMessage { get; set; }
+}

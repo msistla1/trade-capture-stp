@@ -1,0 +1,634 @@
+# Trade Allocation System - Complete Setup Guide
+
+This guide will walk you through setting up the Trade Allocation and Compliance System from scratch.
+
+## Table of Contents
+
+1. [System Requirements](#system-requirements)
+2. [Installing Prerequisites](#installing-prerequisites)
+3. [Database Setup](#database-setup)
+4. [Building the Solution](#building-the-solution)
+5. [Configuration](#configuration)
+6. [Running the Services](#running-the-services)
+7. [Testing the System](#testing-the-system)
+8. [Troubleshooting](#troubleshooting)
+
+## System Requirements
+
+### Minimum Requirements
+
+- **OS**: Windows 10/11, macOS 12+, or Linux (Ubuntu 20.04+)
+- **RAM**: 8 GB minimum, 16 GB recommended
+- **Disk Space**: 5 GB free space
+- **CPU**: 2 cores minimum, 4+ cores recommended
+
+### Software Requirements
+
+- .NET 8 SDK
+- SQL Server 2019+ or SQL Server Express
+- Visual Studio 2022 or VS Code
+- Git
+
+## Installing Prerequisites
+
+### 1. Install .NET 8 SDK
+
+#### Windows
+
+```powershell
+# Download from Microsoft
+# https://dotnet.microsoft.com/download/dotnet/8.0
+
+# Or use winget
+winget install Microsoft.DotNet.SDK.8
+
+# Verify installation
+dotnet --version
+```
+
+#### macOS
+
+```bash
+# Using Homebrew
+brew install --cask dotnet-sdk
+
+# Verify installation
+dotnet --version
+```
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+# Add Microsoft package repository
+wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb
+rm packages-microsoft-prod.deb
+
+# Install .NET SDK
+sudo apt-get update
+sudo apt-get install -y dotnet-sdk-8.0
+
+# Verify installation
+dotnet --version
+```
+
+### 2. Install SQL Server
+
+#### Windows
+
+**Option A: SQL Server Express (Free)**
+
+```powershell
+# Download from:
+# https://www.microsoft.com/en-us/sql-server/sql-server-downloads
+
+# Choose "Express" edition
+# Install with default settings
+# Note the server name (usually: localhost\SQLEXPRESS)
+```
+
+**Option B: SQL Server Developer (Free)**
+
+```powershell
+# Download from same link above
+# Choose "Developer" edition
+# Full features, not for production use
+```
+
+#### macOS/Linux
+
+```bash
+# Use Docker for SQL Server
+docker pull mcr.microsoft.com/mssql/server:2022-latest
+
+docker run -e "ACCEPT_EULA=Y" \
+  -e "MSSQL_SA_PASSWORD=YourStrong!Passw0rd" \
+  -p 1433:1433 \
+  --name sql_server \
+  -d mcr.microsoft.com/mssql/server:2022-latest
+```
+
+### 3. Install Visual Studio or VS Code
+
+#### Visual Studio 2022 (Windows)
+
+```powershell
+# Download from:
+# https://visualstudio.microsoft.com/downloads/
+
+# Choose "Community" (free) edition
+# During installation, select workload:
+#   - ASP.NET and web development
+#   - .NET desktop development
+```
+
+#### VS Code (All platforms)
+
+```bash
+# Download from: https://code.visualstudio.com/
+
+# Install C# extension
+code --install-extension ms-dotnettools.csharp
+code --install-extension ms-dotnettools.csdevkit
+```
+
+### 4. Install Entity Framework Core Tools
+
+```bash
+# Global tool for migrations
+dotnet tool install --global dotnet-ef
+
+# Verify installation
+dotnet ef --version
+```
+
+## Database Setup
+
+### 1. Create Databases
+
+```sql
+-- Connect to SQL Server using SSMS or Azure Data Studio
+
+-- Create databases
+CREATE DATABASE TradeAllocationCompliance;
+CREATE DATABASE TradeAllocationBooking;
+CREATE DATABASE TradeAllocationFund;
+CREATE DATABASE TradeAllocationReference;
+GO
+```
+
+### 2. Configure Connection Strings
+
+Each service needs its connection string configured. Update the following files:
+
+**Compliance.API/appsettings.json:**
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=TradeAllocationCompliance;Trusted_Connection=True;TrustServerCertificate=True"
+  }
+}
+```
+
+**TradeBooking.API/appsettings.json:**
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=TradeAllocationBooking;Trusted_Connection=True;TrustServerCertificate=True"
+  }
+}
+```
+
+**FundData.API/appsettings.json:**
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=TradeAllocationFund;Trusted_Connection=True;TrustServerCertificate=True"
+  }
+}
+```
+
+**ReferenceData.API/appsettings.json:**
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=TradeAllocationReference;Trusted_Connection=True;TrustServerCertificate=True"
+  }
+}
+```
+
+**Note**: If using SQL Server Express, change `Server=localhost` to `Server=localhost\\SQLEXPRESS`
+
+**Note**: If using SQL authentication instead of Windows auth, use:
+```json
+"Server=localhost;Database=TradeAllocationCompliance;User Id=sa;Password=YourPassword;TrustServerCertificate=True"
+```
+
+### 3. Create Database Schema
+
+Since EF Core migrations aren't complete yet, create tables manually:
+
+```sql
+-- Run these scripts on each database
+-- See: docs/database/schema.sql for complete schema
+
+-- Example for Compliance database:
+USE TradeAllocationCompliance;
+GO
+
+CREATE TABLE ComplianceRules (
+    Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    FundId NVARCHAR(50) NOT NULL,
+    Name NVARCHAR(200) NOT NULL,
+    Description NVARCHAR(1000),
+    RuleType NVARCHAR(50) NOT NULL,
+    RuleCategory NVARCHAR(50) NOT NULL,
+    Priority INT NOT NULL,
+    IsActive BIT NOT NULL DEFAULT 1,
+    EffectiveDate DATE NOT NULL,
+    ExpiryDate DATE,
+    Configuration NVARCHAR(MAX) NOT NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy NVARCHAR(100) NOT NULL,
+    UpdatedAt DATETIME2,
+    UpdatedBy NVARCHAR(100),
+    CONSTRAINT CK_ComplianceRules_Configuration_IsJson CHECK (ISJSON(Configuration) = 1)
+);
+GO
+
+CREATE INDEX IX_ComplianceRules_FundId ON ComplianceRules(FundId);
+CREATE INDEX IX_ComplianceRules_Active_Effective ON ComplianceRules(IsActive, EffectiveDate, ExpiryDate);
+GO
+```
+
+### 4. Seed Reference Data
+
+```sql
+-- Insert sample funds
+INSERT INTO Funds (Id, Name, StrategyId, FundType, NetAssetValue, Currency, InceptionDate, Status, UpdatedAt)
+VALUES
+  ('FUND001', 'Growth Equity Fund', 'GROWTH', 'Equity', 100000000, 'USD', '2020-01-01', 'Active', GETUTCDATE()),
+  ('FUND002', 'Income Bond Fund', 'INCOME', 'FixedIncome', 75000000, 'USD', '2019-06-01', 'Active', GETUTCDATE()),
+  ('FUND003', 'Balanced Fund', 'BALANCED', 'Balanced', 150000000, 'USD', '2018-03-15', 'Active', GETUTCDATE());
+
+-- Insert sample securities
+INSERT INTO Securities (Id, Ticker, Name, SecurityType, IssuerId, CreditRating, Currency, UpdatedAt)
+VALUES
+  ('AAPL', 'AAPL', 'Apple Inc.', 'Equity', 'APPLE_INC', 'AAA', 'USD', GETUTCDATE()),
+  ('MSFT', 'MSFT', 'Microsoft Corporation', 'Equity', 'MICROSOFT_CORP', 'AAA', 'USD', GETUTCDATE()),
+  ('TSLA', 'TSLA', 'Tesla Inc.', 'Equity', 'TESLA_INC', 'BBB', 'USD', GETUTCDATE());
+
+-- Insert sample compliance rules
+INSERT INTO ComplianceRules (FundId, Name, Description, RuleType, RuleCategory, Priority, IsActive, EffectiveDate, Configuration, CreatedBy)
+VALUES
+  ('FUND001',
+   'Max 5% Single Issuer',
+   'Maximum 5% exposure to any single issuer',
+   'PercentageLimit',
+   'Issuer',
+   1,
+   1,
+   '2020-01-01',
+   '{"expression":"var currentExposure = portfolio.GetIssuerExposureAsync(fund.Id, security.IssuerId).Result; var proposedExposure = currentExposure + trade.Amount; var limit = fund.NetAssetValue.Amount * 0.05m; proposedExposure <= limit","parameters":{"maxPercentage":5.0,"calculationType":"IssuerExposure"},"metadata":{"displayFormat":"Max {maxPercentage}% exposure to single issuer","errorMessage":"Exceeds maximum issuer exposure of {maxPercentage}%"}}',
+   'system');
+```
+
+## Building the Solution
+
+### 1. Open the Solution
+
+#### Using Visual Studio
+
+```powershell
+cd C:\Users\mcsis\TradeAllocationSystem
+start TradeAllocationSystem.sln
+```
+
+#### Using VS Code
+
+```bash
+cd C:\Users\mcsis\TradeAllocationSystem
+code .
+```
+
+### 2. Restore NuGet Packages
+
+```bash
+# From solution root
+dotnet restore
+```
+
+### 3. Build All Projects
+
+```bash
+# Build everything
+dotnet build
+
+# Or build specific project
+dotnet build src/Services/Compliance/Compliance.API/Compliance.API.csproj
+```
+
+### 4. Verify No Errors
+
+Check the build output - there should be no errors. Warnings are acceptable but investigate any critical ones.
+
+## Configuration
+
+### Service URLs Configuration
+
+Update `appsettings.json` in TradeOrchestrator.API:
+
+```json
+{
+  "Services": {
+    "Compliance": {
+      "BaseUrl": "http://localhost:5001"
+    },
+    "Allocation": {
+      "BaseUrl": "http://localhost:5002"
+    },
+    "TradeBooking": {
+      "BaseUrl": "http://localhost:5003"
+    },
+    "FundData": {
+      "BaseUrl": "http://localhost:5004"
+    },
+    "ReferenceData": {
+      "BaseUrl": "http://localhost:5005"
+    }
+  }
+}
+```
+
+### Logging Configuration
+
+Each service should have logging configured:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning"
+    }
+  }
+}
+```
+
+### CORS Configuration (for UI integration)
+
+In each API's Program.cs:
+
+```csharp
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+// In Configure section
+app.UseCors();
+```
+
+## Running the Services
+
+### Option 1: Run All Services (PowerShell Script)
+
+Create `run-all-services.ps1`:
+
+```powershell
+# Run all services in separate windows
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd src\Services\Compliance\Compliance.API; dotnet run"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd src\Services\Allocation\Allocation.API; dotnet run"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd src\Services\TradeBooking\TradeBooking.API; dotnet run"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd src\Services\TradeOrchestrator\TradeOrchestrator.API; dotnet run"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd src\Services\FundData\FundData.API; dotnet run"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd src\Services\ReferenceData\ReferenceData.API; dotnet run"
+```
+
+Run it:
+```powershell
+.\run-all-services.ps1
+```
+
+### Option 2: Run Individually
+
+Open 6 terminal windows and run each service:
+
+```bash
+# Terminal 1
+cd src/Services/Compliance/Compliance.API
+dotnet run --urls "http://localhost:5001"
+
+# Terminal 2
+cd src/Services/Allocation/Allocation.API
+dotnet run --urls "http://localhost:5002"
+
+# Terminal 3
+cd src/Services/TradeBooking/TradeBooking.API
+dotnet run --urls "http://localhost:5003"
+
+# Terminal 4
+cd src/Services/TradeOrchestrator/TradeOrchestrator.API
+dotnet run --urls "http://localhost:5000"
+
+# Terminal 5
+cd src/Services/FundData/FundData.API
+dotnet run --urls "http://localhost:5004"
+
+# Terminal 6
+cd src/Services/ReferenceData/ReferenceData.API
+dotnet run --urls "http://localhost:5005"
+```
+
+### Option 3: Use Docker Compose (Advanced)
+
+Create `docker-compose.yml` in solution root:
+
+```yaml
+version: '3.8'
+
+services:
+  compliance-api:
+    build: ./src/Services/Compliance/Compliance.API
+    ports:
+      - "5001:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+
+  allocation-api:
+    build: ./src/Services/Allocation/Allocation.API
+    ports:
+      - "5002:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+
+  # Add other services...
+```
+
+Run:
+```bash
+docker-compose up
+```
+
+## Testing the System
+
+### 1. Health Check
+
+Verify all services are running:
+
+```bash
+curl http://localhost:5001/api/compliance/health
+curl http://localhost:5002/api/allocation/health
+curl http://localhost:5003/api/trades/health
+curl http://localhost:5004/api/funds/health
+curl http://localhost:5005/api/securities/health
+```
+
+### 2. Test Compliance Evaluation
+
+```bash
+curl -X POST http://localhost:5001/api/compliance/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "securityId": "AAPL",
+    "counterpartyId": "BROKER1",
+    "totalAmount": 1000000,
+    "price": 150.00,
+    "tradeDate": "2024-01-15T00:00:00Z",
+    "fundIds": ["FUND001", "FUND002"]
+  }'
+```
+
+### 3. Test Allocation
+
+```bash
+curl -X POST http://localhost:5002/api/allocation/distribute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId": "test-123",
+    "securityId": "AAPL",
+    "totalAmount": 1000000,
+    "price": 150.00,
+    "methodology": "ProRata",
+    "funds": [
+      {
+        "fundId": "FUND001",
+        "availableCapacity": 500000,
+        "priority": 1
+      },
+      {
+        "fundId": "FUND002",
+        "availableCapacity": 750000,
+        "priority": 2
+      }
+    ]
+  }'
+```
+
+### 4. Test Full Workflow
+
+```bash
+curl -X POST http://localhost:5000/api/trades \
+  -H "Content-Type: application/json" \
+  -d '{
+    "securityId": "AAPL",
+    "counterpartyId": "BROKER1",
+    "totalAmount": 1000000,
+    "price": 150.00,
+    "tradeDate": "2024-01-15T00:00:00Z",
+    "selectedFunds": ["FUND001", "FUND002"],
+    "strategyId": "GROWTH",
+    "allocationMethodology": "ProRata",
+    "userId": "trader@firm.com",
+    "currency": "USD"
+  }'
+```
+
+### 5. Access Swagger UI
+
+Open browser and navigate to:
+
+- http://localhost:5000/swagger - TradeOrchestrator
+- http://localhost:5001/swagger - Compliance
+- http://localhost:5002/swagger - Allocation
+- http://localhost:5003/swagger - TradeBooking
+- http://localhost:5004/swagger - FundData
+- http://localhost:5005/swagger - ReferenceData
+
+## Troubleshooting
+
+### Problem: "dotnet: command not found"
+
+**Solution**: .NET SDK not installed or not in PATH
+```bash
+# Reinstall .NET SDK
+# Restart terminal
+# Verify: dotnet --version
+```
+
+### Problem: "Cannot connect to SQL Server"
+
+**Solution**: Check SQL Server is running
+```powershell
+# Windows - Check SQL Server service
+Get-Service -Name MSSQL*
+
+# Start if stopped
+Start-Service -Name "MSSQL$SQLEXPRESS"
+```
+
+### Problem: Port already in use
+
+**Solution**: Change port or kill process
+```powershell
+# Windows - Find process on port 5001
+netstat -ano | findstr :5001
+
+# Kill process (replace PID)
+taskkill /PID <PID> /F
+```
+
+### Problem: Database migration errors
+
+**Solution**: Drop and recreate database
+```sql
+DROP DATABASE TradeAllocationCompliance;
+CREATE DATABASE TradeAllocationCompliance;
+-- Re-run schema scripts
+```
+
+### Problem: Compilation errors
+
+**Solution**: Clean and rebuild
+```bash
+dotnet clean
+dotnet restore
+dotnet build
+```
+
+### Problem: CORS errors from UI
+
+**Solution**: Add CORS policy in each API
+```csharp
+// In Program.cs
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+
+app.UseCors();
+```
+
+## Next Steps
+
+1. ✅ All services running and responding to health checks
+2. ✅ Database schemas created and seeded
+3. ✅ Test APIs via Swagger
+4. ⏳ Implement remaining features (orchestrator, booking service)
+5. ⏳ Add authentication/authorization
+6. ⏳ Set up logging and monitoring
+7. ⏳ Create unit and integration tests
+8. ⏳ Deploy to staging environment
+
+## Support
+
+If you encounter issues not covered here:
+
+1. Check logs in service output windows
+2. Verify all dependencies are installed
+3. Ensure database is accessible
+4. Review API error responses
+5. Contact development team
+
+---
+
+**Setup complete! You're ready to start development.**

@@ -1,0 +1,29 @@
+using Aurora.Core.Enums;
+
+namespace Aurora.Core.DTOs;
+
+public class TradeBookingRequest
+{
+    public string TradeReference { get; set; } = string.Empty;
+    public Guid SecurityId { get; set; }
+    public Guid CounterpartyId { get; set; }
+    public Guid StrategyId { get; set; }
+
+    public decimal TotalTradeAmount { get; set; }
+    public decimal Price { get; set; }
+    public DateTime TradeDate { get; set; }
+    public DateTime SettlementDate { get; set; }
+
+    public MarketType MarketType { get; set; }
+    public string TransactionType { get; set; } = string.Empty;
+    public AllocationMethodology AllocationMethodology { get; set; }
+
+    public List<CustomAllocationDto>? CustomAllocations { get; set; }
+}
+
+public class CustomAllocationDto
+{
+    public Guid FundId { get; set; }
+    public decimal TargetAmount { get; set; }
+    public decimal TargetPercentage { get; set; }
+}

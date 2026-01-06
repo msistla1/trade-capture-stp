@@ -1,0 +1,367 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Aurora.AllocationEngine.Interfaces;
+using Aurora.AllocationEngine.Models;
+using Aurora.ComplianceEngine.Interfaces;
+using Aurora.ComplianceEngine.Models;
+using Aurora.Core.DTOs;
+using Aurora.Core.Entities;
+using Aurora.Core.Enums;
+using Aurora.Core.Interfaces;
+using Microsoft.Extensions.Logging;
+
+namespace Aurora.TradeBooking.Services;
+
+public class TradeBookingService
+{
+    private readonly IRepository<Trade> _tradeRepository;
+    private readonly IRepository<Fund> _fundRepository;
+    private readonly IRepository<Security> _securityRepository;
+    private readonly IRepository<Issuer> _issuerRepository;
+    private readonly IRepository<TradeAllocation> _allocationRepository;
+    private readonly IRepository<ComplianceCheckResult> _complianceResultRepository;
+    private readonly IComplianceEngine _complianceEngine;
+    private readonly IAllocationEngine _allocationEngine;
+    private readonly IAuditLogger _auditLogger;
+    private readonly ILogger<TradeBookingService> _logger;
+
+    public TradeBookingService(
+        IRepository<Trade> tradeRepository,
+        IRepository<Fund> fundRepository,
+        IRepository<Security> securityRepository,
+        IRepository<Issuer> issuerRepository,
+        IRepository<TradeAllocation> allocationRepository,
+        IRepository<ComplianceCheckResult> complianceResultRepository,
+        IComplianceEngine complianceEngine,
+        IAllocationEngine allocationEngine,
+        IAuditLogger auditLogger,
+        ILogger<TradeBookingService> logger)
+    {
+        _tradeRepository = tradeRepository;
+        _fundRepository = fundRepository;
+        _securityRepository = securityRepository;
+        _issuerRepository = issuerRepository;
+        _allocationRepository = allocationRepository;
+        _complianceResultRepository = complianceResultRepository;
+        _complianceEngine = complianceEngine;
+        _allocationEngine = allocationEngine;
+        _auditLogger = auditLogger;
+        _logger = logger;
+    }
+
+    public async Task<TradeBookingResponse> BookTradeAsync(TradeBookingRequest request, CancellationToken cancellationToken = default)
+    {
+        var overallStopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("Starting trade booking for {TradeRef}", request.TradeReference);
+
+        var response = new TradeBookingResponse
+        {
+            Success = false
+        };
+
+        Trade? trade = null;
+
+        try
+        {
+            // Step 1: Create the trade entity
+            trade = await CreateTradeEntityAsync(request, cancellationToken);
+            await _tradeRepository.AddAsync(trade, cancellationToken);
+            await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+            response.TradeId = trade.Id;
+
+            await _auditLogger.LogAsync(
+                "TradeBooking",
+                "TradeCreated",
+                "Trade",
+                trade.Id.ToString(),
+                $"Trade created: {request.TradeReference}",
+                trade.Id);
+
+            // Step 2: Get security and issuer details
+            var security = await _securityRepository.GetByIdAsync(request.SecurityId, cancellationToken);
+            if (security == null)
+            {
+                throw new InvalidOperationException($"Security not found: {request.SecurityId}");
+            }
+
+            var issuer = await _issuerRepository.GetByIdAsync(security.IssuerId, cancellationToken);
+            if (issuer == null)
+            {
+                throw new InvalidOperationException($"Issuer not found: {security.IssuerId}");
+            }
+
+            // Step 3: Get strategy funds (all funds or subset based on market type)
+            var funds = await GetStrategyFundsAsync(request, cancellationToken);
+
+            if (!funds.Any())
+            {
+                throw new InvalidOperationException("No active funds found for the selected strategy");
+            }
+
+            _logger.LogInformation("Found {FundCount} funds for strategy", funds.Count);
+
+            // Step 4: Run compliance checks
+            trade.Status = TradeStatus.ComplianceCheckPending;
+            await _tradeRepository.UpdateAsync(trade, cancellationToken);
+            await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+            var complianceRequest = new ComplianceCheckRequest
+            {
+                Trade = trade,
+                Funds = funds,
+                Security = security,
+                Issuer = issuer
+            };
+
+            var complianceResponse = await _complianceEngine.CheckComplianceAsync(complianceRequest, cancellationToken);
+
+            response.ComplianceCheckSummary = BuildComplianceCheckSummary(complianceResponse);
+
+            // Save compliance check results
+            await SaveComplianceCheckResultsAsync(trade.Id, complianceResponse, cancellationToken);
+
+            if (!complianceResponse.AllPassed)
+            {
+                _logger.LogWarning("Compliance check failed for trade {TradeRef}", request.TradeReference);
+                trade.Status = TradeStatus.ComplianceCheckFailed;
+                trade.ComplianceCheckSummary = JsonSerializer.Serialize(response.ComplianceCheckSummary);
+                trade.FailureReason = $"{response.ComplianceCheckSummary.HardLimitBreaches} hard limit breach(es)";
+                await _tradeRepository.UpdateAsync(trade, cancellationToken);
+                await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+                response.Status = TradeStatus.ComplianceCheckFailed;
+                response.Message = "Trade booking failed: Compliance checks did not pass";
+                response.Errors.Add(trade.FailureReason);
+                return response;
+            }
+
+            // Step 5: Run allocation
+            trade.Status = TradeStatus.AllocationPending;
+            await _tradeRepository.UpdateAsync(trade, cancellationToken);
+            await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+            var allocationRequest = new AllocationRequest
+            {
+                Trade = trade,
+                Methodology = request.AllocationMethodology,
+                ComplianceResults = complianceResponse,
+                CustomAllocations = request.CustomAllocations
+            };
+
+            var allocationResponse = await _allocationEngine.AllocateAsync(allocationRequest, cancellationToken);
+
+            response.AllocationSummary = BuildAllocationSummary(allocationResponse);
+
+            if (!allocationResponse.Success || allocationResponse.TotalAllocated == 0)
+            {
+                _logger.LogWarning("Allocation failed for trade {TradeRef}", request.TradeReference);
+                trade.Status = TradeStatus.Failed;
+                trade.AllocationSummary = JsonSerializer.Serialize(response.AllocationSummary);
+                trade.FailureReason = "No allocations could be made";
+                await _tradeRepository.UpdateAsync(trade, cancellationToken);
+                await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+                response.Status = TradeStatus.Failed;
+                response.Message = "Trade booking failed: Allocation unsuccessful";
+                response.Errors.Add(trade.FailureReason);
+                return response;
+            }
+
+            // Step 6: Save allocations and book the trade
+            await SaveAllocationsAsync(trade.Id, allocationResponse, cancellationToken);
+
+            trade.Status = TradeStatus.Booked;
+            trade.ComplianceCheckSummary = JsonSerializer.Serialize(response.ComplianceCheckSummary);
+            trade.AllocationSummary = JsonSerializer.Serialize(response.AllocationSummary);
+            await _tradeRepository.UpdateAsync(trade, cancellationToken);
+            await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+            // Step 7: Build final response
+            response.Success = true;
+            response.Status = TradeStatus.Booked;
+            response.Message = $"Trade successfully booked: {allocationResponse.TotalAllocated:C} allocated across {allocationResponse.Allocations.Count} fund(s)";
+
+            overallStopwatch.Stop();
+
+            // Get audit trail
+            response.AuditTrail = (await _auditLogger.GetAuditTrailAsync(trade.Id)).ToList();
+
+            await _auditLogger.LogAsync(
+                "TradeBooking",
+                "TradeBooked",
+                "Trade",
+                trade.Id.ToString(),
+                $"Trade booked successfully in {overallStopwatch.ElapsedMilliseconds}ms",
+                trade.Id);
+
+            _logger.LogInformation(
+                "Trade booking completed successfully for {TradeRef} in {ElapsedMs}ms",
+                request.TradeReference,
+                overallStopwatch.ElapsedMilliseconds);
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error booking trade {TradeRef}", request.TradeReference);
+
+            if (trade != null)
+            {
+                trade.Status = TradeStatus.Failed;
+                trade.FailureReason = ex.Message;
+                await _tradeRepository.UpdateAsync(trade, cancellationToken);
+                await _tradeRepository.SaveChangesAsync(cancellationToken);
+
+                response.TradeId = trade.Id;
+                response.Status = TradeStatus.Failed;
+            }
+
+            response.Success = false;
+            response.Message = $"Trade booking failed: {ex.Message}";
+            response.Errors.Add(ex.Message);
+
+            return response;
+        }
+    }
+
+    private async Task<Trade> CreateTradeEntityAsync(TradeBookingRequest request, CancellationToken cancellationToken)
+    {
+        return new Trade
+        {
+            TradeReference = request.TradeReference,
+            SecurityId = request.SecurityId,
+            CounterpartyId = request.CounterpartyId,
+            StrategyId = request.StrategyId,
+            TotalTradeAmount = request.TotalTradeAmount,
+            Price = request.Price,
+            Quantity = request.TotalTradeAmount / request.Price,
+            TradeDate = request.TradeDate,
+            SettlementDate = request.SettlementDate,
+            MarketType = request.MarketType,
+            TransactionType = request.TransactionType,
+            AllocationMethodology = request.AllocationMethodology,
+            Status = TradeStatus.Draft
+        };
+    }
+
+    private async Task<List<Fund>> GetStrategyFundsAsync(TradeBookingRequest request, CancellationToken cancellationToken)
+    {
+        var funds = await _fundRepository.FindAsync(
+            f => f.StrategyId == request.StrategyId && f.IsActive && !f.IsDeleted,
+            cancellationToken);
+
+        return funds.ToList();
+    }
+
+    private ComplianceCheckSummary BuildComplianceCheckSummary(ComplianceCheckResponse complianceResponse)
+    {
+        var summary = new ComplianceCheckSummary
+        {
+            AllPassed = complianceResponse.AllPassed,
+            TotalRulesChecked = complianceResponse.FundResults.Sum(f => f.RuleResults.Count),
+            RulesPassed = complianceResponse.FundResults.Sum(f => f.RuleResults.Count(r => r.Passed)),
+            RulesFailed = complianceResponse.FundResults.Sum(f => f.RuleResults.Count(r => !r.Passed)),
+            SoftLimitBreaches = complianceResponse.FundResults.Sum(f =>
+                f.RuleResults.Count(r => !r.Passed && r.Rule.Severity == ComplianceRuleSeverity.Soft)),
+            HardLimitBreaches = complianceResponse.FundResults.Sum(f =>
+                f.RuleResults.Count(r => !r.Passed && r.Rule.Severity == ComplianceRuleSeverity.Hard)),
+            ExecutionTime = complianceResponse.ExecutionTime
+        };
+
+        foreach (var fundResult in complianceResponse.FundResults)
+        {
+            foreach (var ruleResult in fundResult.RuleResults.Where(r => !r.Passed))
+            {
+                summary.Results.Add(new ComplianceCheckResultDto
+                {
+                    FundId = fundResult.Fund.Id,
+                    FundCode = fundResult.Fund.FundCode,
+                    Passed = ruleResult.Passed,
+                    RuleCode = ruleResult.Rule.RuleCode,
+                    RuleName = ruleResult.Rule.RuleName,
+                    Severity = ruleResult.Rule.Severity.ToString(),
+                    CalculatedCapacity = ruleResult.CalculatedCapacity,
+                    Message = ruleResult.Message
+                });
+            }
+        }
+
+        return summary;
+    }
+
+    private AllocationSummary BuildAllocationSummary(AllocationResponse allocationResponse)
+    {
+        var summary = new AllocationSummary
+        {
+            Success = allocationResponse.Success,
+            TotalFunds = allocationResponse.Allocations.Count,
+            FundsAllocated = allocationResponse.Allocations.Count(a => a.AllocatedAmount > 0),
+            TotalAllocated = allocationResponse.TotalAllocated,
+            TotalRequested = allocationResponse.TotalRequested,
+            ExecutionTime = allocationResponse.ExecutionTime
+        };
+
+        foreach (var allocation in allocationResponse.Allocations)
+        {
+            summary.Allocations.Add(new AllocationResultDto
+            {
+                FundId = allocation.Fund.Id,
+                FundCode = allocation.Fund.FundCode,
+                AllocatedAmount = allocation.AllocatedAmount,
+                AllocationPercentage = allocation.AllocationPercentage,
+                AvailableCapacity = allocation.AvailableCapacity,
+                AllocationReason = allocation.AllocationReason
+            });
+        }
+
+        return summary;
+    }
+
+    private async Task SaveComplianceCheckResultsAsync(Guid tradeId, ComplianceCheckResponse complianceResponse, CancellationToken cancellationToken)
+    {
+        var results = new List<ComplianceCheckResult>();
+
+        foreach (var fundResult in complianceResponse.FundResults)
+        {
+            foreach (var ruleResult in fundResult.RuleResults)
+            {
+                results.Add(new ComplianceCheckResult
+                {
+                    TradeId = tradeId,
+                    FundId = fundResult.Fund.Id,
+                    ComplianceRuleId = ruleResult.Rule.Id,
+                    Passed = ruleResult.Passed,
+                    RuleCode = ruleResult.Rule.RuleCode,
+                    RuleName = ruleResult.Rule.RuleName,
+                    Severity = ruleResult.Rule.Severity,
+                    CurrentValue = ruleResult.CurrentValue,
+                    LimitValue = ruleResult.LimitValue,
+                    CalculatedCapacity = ruleResult.CalculatedCapacity,
+                    Message = ruleResult.Message,
+                    DetailedMessage = ruleResult.DetailedMessage
+                });
+            }
+        }
+
+        await _complianceResultRepository.AddRangeAsync(results, cancellationToken);
+        await _complianceResultRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SaveAllocationsAsync(Guid tradeId, AllocationResponse allocationResponse, CancellationToken cancellationToken)
+    {
+        var allocations = allocationResponse.Allocations.Select(a => new TradeAllocation
+        {
+            TradeId = tradeId,
+            FundId = a.Fund.Id,
+            AllocatedAmount = a.AllocatedAmount,
+            AllocatedQuantity = a.AllocatedQuantity,
+            AllocationPercentage = a.AllocationPercentage,
+            AvailableCapacity = a.AvailableCapacity,
+            AllocationReason = a.AllocationReason
+        }).ToList();
+
+        await _allocationRepository.AddRangeAsync(allocations, cancellationToken);
+        await _allocationRepository.SaveChangesAsync(cancellationToken);
+    }
+}

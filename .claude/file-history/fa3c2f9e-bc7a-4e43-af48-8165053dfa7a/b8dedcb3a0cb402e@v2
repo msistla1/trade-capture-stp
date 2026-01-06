@@ -1,0 +1,100 @@
+using System.Diagnostics;
+using Aurora.AllocationEngine.Interfaces;
+using Aurora.AllocationEngine.Models;
+using Aurora.AllocationEngine.Strategies;
+using Aurora.Core.Enums;
+using Aurora.Core.Interfaces;
+using Microsoft.Extensions.Logging;
+
+namespace Aurora.AllocationEngine.Services;
+
+public class AllocationEngineService : IAllocationEngine
+{
+    private readonly ILogger<AllocationEngineService> _logger;
+    private readonly IAuditLogger _auditLogger;
+    private readonly ILogger<ProRataAllocationStrategy> _proRataLogger;
+    private readonly ILogger<TargetedAllocationStrategy> _targetedLogger;
+    private readonly ILogger<CustomAllocationStrategy> _customLogger;
+
+    public AllocationEngineService(
+        ILogger<AllocationEngineService> logger,
+        IAuditLogger auditLogger,
+        ILogger<ProRataAllocationStrategy> proRataLogger,
+        ILogger<TargetedAllocationStrategy> targetedLogger,
+        ILogger<CustomAllocationStrategy> customLogger)
+    {
+        _logger = logger;
+        _auditLogger = auditLogger;
+        _proRataLogger = proRataLogger;
+        _targetedLogger = targetedLogger;
+        _customLogger = customLogger;
+    }
+
+    public async Task<AllocationResponse> AllocateAsync(AllocationRequest request, CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("Starting allocation for trade {TradeRef} using methodology {Methodology}",
+            request.Trade.TradeReference, request.Methodology);
+
+        var response = new AllocationResponse
+        {
+            TotalRequested = request.Trade.TotalTradeAmount
+        };
+
+        try
+        {
+            // Select allocation strategy based on methodology
+            IAllocationStrategy strategy = request.Methodology switch
+            {
+                AllocationMethodology.ProRata => new ProRataAllocationStrategy(_proRataLogger),
+                AllocationMethodology.Targeted => new TargetedAllocationStrategy(_targetedLogger),
+                AllocationMethodology.Custom => new CustomAllocationStrategy(_customLogger),
+                _ => throw new ArgumentException($"Unknown allocation methodology: {request.Methodology}")
+            };
+
+            // Execute allocation
+            var allocations = await strategy.AllocateAsync(request, cancellationToken);
+
+            response.Allocations = allocations;
+            response.TotalAllocated = allocations.Sum(a => a.AllocatedAmount);
+            response.Success = response.TotalAllocated > 0;
+
+            if (response.Success)
+            {
+                var allocationPercentage = (response.TotalAllocated / response.TotalRequested) * 100;
+                response.Message = $"Allocated {response.TotalAllocated:C} ({allocationPercentage:F2}%) across {allocations.Count} fund(s)";
+            }
+            else
+            {
+                response.Message = "No allocations could be made. All funds either failed compliance or have insufficient capacity.";
+            }
+
+            stopwatch.Stop();
+            response.ExecutionTime = stopwatch.Elapsed;
+
+            await _auditLogger.LogAsync(
+                "AllocationEngine",
+                "Allocation",
+                "Trade",
+                request.Trade.Id.ToString(),
+                $"Methodology={request.Methodology}, Allocated={response.TotalAllocated:C}, Funds={allocations.Count}",
+                request.Trade.Id);
+
+            _logger.LogInformation(
+                "Allocation completed for trade {TradeRef} in {ElapsedMs}ms. Allocated: {Total:C} to {FundCount} funds",
+                request.Trade.TradeReference,
+                stopwatch.ElapsedMilliseconds,
+                response.TotalAllocated,
+                allocations.Count);
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during allocation for trade {TradeRef}", request.Trade.TradeReference);
+            response.Success = false;
+            response.Message = $"Allocation error: {ex.Message}";
+            return response;
+        }
+    }
+}

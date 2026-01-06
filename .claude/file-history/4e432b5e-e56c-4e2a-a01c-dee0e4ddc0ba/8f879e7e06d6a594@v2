@@ -1,0 +1,156 @@
+using Microsoft.AspNetCore.Mvc;
+using TradeWorkflow.API.Models;
+using TradeWorkflow.Application.Services;
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class TradesController : ControllerBase
+{
+    private readonly TradeWorkflowService _workflowService;
+    private readonly ILogger<TradesController> _logger;
+
+    public TradesController(
+        TradeWorkflowService workflowService,
+        ILogger<TradesController> logger)
+    {
+        _workflowService = workflowService;
+        _logger = logger;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<TradeResponse>> CreateTrade([FromBody] CreateTradeRequest request)
+    {
+        var trade = new Trade
+        {
+            TradeReference = request.TradeReference,
+            Instrument = request.Instrument,
+            Quantity = request.Quantity,
+            Price = request.Price,
+            Counterparty = request.Counterparty,
+            TradeDate = request.TradeDate,
+            TradeType = request.TradeType
+        };
+
+        var createdTrade = await _workflowService.CreateTradeAsync(trade);
+        var permittedTriggers = await _workflowService.GetPermittedTriggersAsync(createdTrade.Id);
+
+        _logger.LogInformation("Created trade {TradeId} with reference {TradeReference}",
+            createdTrade.Id, createdTrade.TradeReference);
+
+        return CreatedAtAction(
+            nameof(GetTrade),
+            new { id = createdTrade.Id },
+            MapToResponse(createdTrade, permittedTriggers));
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<TradeResponse>> GetTrade(Guid id)
+    {
+        var trade = await _workflowService.GetTradeAsync(id);
+        if (trade == null)
+        {
+            return NotFound(new { Message = $"Trade with ID {id} not found" });
+        }
+
+        var permittedTriggers = await _workflowService.GetPermittedTriggersAsync(id);
+        return Ok(MapToResponse(trade, permittedTriggers));
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<TradeResponse>>> GetAllTrades()
+    {
+        var trades = await _workflowService.GetAllTradesAsync();
+        var responses = new List<TradeResponse>();
+
+        foreach (var trade in trades)
+        {
+            var permittedTriggers = await _workflowService.GetPermittedTriggersAsync(trade.Id);
+            responses.Add(MapToResponse(trade, permittedTriggers));
+        }
+
+        return Ok(responses);
+    }
+
+    [HttpPost("{id}/events")]
+    public async Task<ActionResult<TradeResponse>> ProcessTrigger(
+        Guid id,
+        [FromBody] ProcessTriggerRequest request)
+    {
+        try
+        {
+            var newState = await _workflowService.ProcessTriggerAsync(id, request.Trigger);
+
+            _logger.LogInformation("Trade {TradeId} transitioned to state {State} via trigger {Trigger}",
+                id, newState, request.Trigger);
+
+            var trade = await _workflowService.GetTradeAsync(id);
+            var permittedTriggers = await _workflowService.GetPermittedTriggersAsync(id);
+
+            return Ok(MapToResponse(trade!, permittedTriggers));
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid state transition attempted for trade {TradeId}", id);
+            return BadRequest(new { Message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/permitted-triggers")]
+    public async Task<ActionResult<IEnumerable<string>>> GetPermittedTriggers(Guid id)
+    {
+        try
+        {
+            var triggers = await _workflowService.GetPermittedTriggersAsync(id);
+            return Ok(triggers.Select(t => t.ToString()));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { Message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/history")]
+    public async Task<ActionResult<IEnumerable<TradeHistoryResponse>>> GetTradeHistory(Guid id)
+    {
+        var history = await _workflowService.GetTradeHistoryAsync(id);
+        var responses = history.Select(h => new TradeHistoryResponse
+        {
+            Id = h.Id,
+            TradeId = h.TradeId,
+            FromState = h.FromState,
+            ToState = h.ToState,
+            Trigger = h.Trigger,
+            TransitionedAt = h.TransitionedAt,
+            Notes = h.Notes
+        });
+
+        return Ok(responses);
+    }
+
+    private static TradeResponse MapToResponse(Trade trade, IEnumerable<Domain.Enums.TcrTrigger> permittedTriggers)
+    {
+        return new TradeResponse
+        {
+            Id = trade.Id,
+            TradeReference = trade.TradeReference,
+            CurrentState = trade.CurrentState,
+            Instrument = trade.Instrument,
+            Quantity = trade.Quantity,
+            Price = trade.Price,
+            Counterparty = trade.Counterparty,
+            TradeDate = trade.TradeDate,
+            TradeType = trade.TradeType,
+            IsValidated = trade.IsValidated,
+            IsDuplicate = trade.IsDuplicate,
+            ValidationErrors = trade.ValidationErrors,
+            RetryCount = trade.RetryCount,
+            CreatedAt = trade.CreatedAt,
+            UpdatedAt = trade.UpdatedAt,
+            ErrorMessage = trade.ErrorMessage,
+            PermittedTriggers = permittedTriggers
+        };
+    }
+}

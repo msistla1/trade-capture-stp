@@ -1,0 +1,22 @@
+[
+  {
+    "content": "Create comprehensive architecture design document",
+    "status": "in_progress",
+    "activeForm": "Creating comprehensive architecture design document"
+  },
+  {
+    "content": "Design compliance engine architecture and data models",
+    "status": "pending",
+    "activeForm": "Designing compliance engine architecture and data models"
+  },
+  {
+    "content": "Design allocation engine architecture and workflows",
+    "status": "pending",
+    "activeForm": "Designing allocation engine architecture and workflows"
+  },
+  {
+    "content": "Create sample implementation code structures",
+    "status": "pending",
+    "activeForm": "Creating sample implementation code structures"
+  }
+]

@@ -1,0 +1,161 @@
+using Compliance.Domain.RuleEngine;
+using Compliance.Infrastructure.Repositories;
+using Microsoft.Extensions.Logging;
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Enums;
+
+namespace Compliance.API.Services;
+
+public class ComplianceService : IComplianceService
+{
+    private readonly IRuleEvaluator _ruleEvaluator;
+    private readonly IFundRepository _fundRepository;
+    private readonly ISecurityRepository _securityRepository;
+    private readonly IPortfolioRepository _portfolioRepository;
+    private readonly IComplianceRuleRepository _ruleRepository;
+    private readonly ILogger<ComplianceService> _logger;
+
+    public ComplianceService(
+        IRuleEvaluator ruleEvaluator,
+        IFundRepository fundRepository,
+        ISecurityRepository securityRepository,
+        IPortfolioRepository portfolioRepository,
+        IComplianceRuleRepository ruleRepository,
+        ILogger<ComplianceService> logger)
+    {
+        _ruleEvaluator = ruleEvaluator;
+        _fundRepository = fundRepository;
+        _securityRepository = securityRepository;
+        _portfolioRepository = portfolioRepository;
+        _ruleRepository = ruleRepository;
+        _logger = logger;
+    }
+
+    public async Task<ComplianceResponse> EvaluateAsync(ComplianceRequest request)
+    {
+        var requestId = request.RequestId ?? Guid.NewGuid().ToString();
+
+        _logger.LogInformation(
+            "Starting compliance evaluation for request {RequestId} with {FundCount} funds",
+            requestId,
+            request.FundIds.Count);
+
+        var security = await _securityRepository.GetByIdAsync(request.SecurityId);
+        if (security == null)
+        {
+            throw new InvalidOperationException($"Security {request.SecurityId} not found");
+        }
+
+        // Evaluate all funds in parallel
+        var evaluationTasks = request.FundIds
+            .Select(fundId => EvaluateFundAsync(fundId, security, request))
+            .ToList();
+
+        var results = await Task.WhenAll(evaluationTasks);
+
+        var overallStatus = DetermineOverallStatus(results);
+
+        _logger.LogInformation(
+            "Compliance evaluation completed for request {RequestId}: {Status}",
+            requestId,
+            overallStatus);
+
+        return new ComplianceResponse(
+            requestId,
+            DateTime.UtcNow,
+            results.ToList(),
+            overallStatus
+        );
+    }
+
+    private async Task<FundComplianceResult> EvaluateFundAsync(
+        string fundId,
+        Shared.Contracts.Entities.Security security,
+        ComplianceRequest request)
+    {
+        var fund = await _fundRepository.GetByIdAsync(fundId);
+        if (fund == null)
+        {
+            _logger.LogWarning("Fund {FundId} not found", fundId);
+            return new FundComplianceResult(
+                fundId,
+                "Unknown Fund",
+                false,
+                0m,
+                new List<RuleEvaluationResult>(),
+                new List<string> { "Fund not found" }
+            );
+        }
+
+        var portfolio = await _portfolioRepository.GetPortfolioDataAsync(fundId);
+        var activeRules = await _ruleRepository.GetActiveRulesAsync(fundId, request.TradeDate);
+
+        var ruleResults = new List<RuleEvaluationResult>();
+        var capacities = new List<decimal>();
+
+        // Evaluate each rule in priority order
+        foreach (var rule in activeRules.OrderBy(r => r.Priority))
+        {
+            var context = new RuleContext(
+                fund,
+                security,
+                new TradeContext(
+                    request.TotalAmount,
+                    request.Price,
+                    request.TradeDate,
+                    request.CounterpartyId
+                ),
+                portfolio
+            );
+
+            var result = await _ruleEvaluator.EvaluateAsync(rule, context);
+            ruleResults.Add(result);
+
+            if (result.Passed && result.CalculatedValue.HasValue)
+            {
+                capacities.Add(result.CalculatedValue.Value);
+            }
+            else if (!result.Passed)
+            {
+                capacities.Add(0);
+            }
+        }
+
+        // Available capacity is the minimum across all rules
+        var availableCapacity = capacities.Any() ? capacities.Min() : 0m;
+        var isCompliant = ruleResults.All(r => r.Passed);
+
+        var violations = ruleResults
+            .Where(r => !r.Passed)
+            .Select(r => r.Message)
+            .ToList();
+
+        _logger.LogDebug(
+            "Fund {FundId} evaluation: Compliant={IsCompliant}, Capacity={Capacity}",
+            fundId,
+            isCompliant,
+            availableCapacity);
+
+        return new FundComplianceResult(
+            fundId,
+            fund.Name,
+            isCompliant,
+            availableCapacity,
+            ruleResults,
+            violations
+        );
+    }
+
+    private ComplianceStatus DetermineOverallStatus(FundComplianceResult[] results)
+    {
+        var compliantCount = results.Count(r => r.IsCompliant);
+
+        if (compliantCount == results.Length)
+            return ComplianceStatus.AllPassed;
+
+        if (compliantCount == 0)
+            return ComplianceStatus.AllFailed;
+
+        return ComplianceStatus.PartialFailure;
+    }
+}

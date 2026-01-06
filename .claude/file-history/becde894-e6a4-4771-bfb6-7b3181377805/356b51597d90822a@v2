@@ -1,0 +1,79 @@
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Enums;
+
+namespace Allocation.API.Strategies;
+
+public class TargetedAllocationStrategy : IAllocationStrategy
+{
+    public AllocationResponse Allocate(AllocationRequest request)
+    {
+        var allocations = new List<FundAllocation>();
+        var totalAllocated = 0m;
+        var warnings = new List<string>();
+
+        // Sort by priority for conflict resolution
+        var orderedFunds = request.Funds
+            .OrderBy(f => f.Priority)
+            .ToList();
+
+        foreach (var fund in orderedFunds)
+        {
+            if (!fund.TargetAmount.HasValue)
+            {
+                warnings.Add($"Fund {fund.FundId} has no target amount specified");
+                continue;
+            }
+
+            var targetAmount = fund.TargetAmount.Value;
+            var remainingToAllocate = request.TotalAmount - totalAllocated;
+
+            // Can't allocate more than remaining
+            if (targetAmount > remainingToAllocate)
+            {
+                warnings.Add(
+                    $"Fund {fund.FundId} target ({targetAmount:C}) exceeds remaining amount ({remainingToAllocate:C})");
+                targetAmount = remainingToAllocate;
+            }
+
+            // Can't allocate more than capacity
+            if (targetAmount > fund.AvailableCapacity)
+            {
+                warnings.Add(
+                    $"Fund {fund.FundId} target ({targetAmount:C}) exceeds capacity ({fund.AvailableCapacity:C})");
+                targetAmount = fund.AvailableCapacity;
+            }
+
+            if (targetAmount > 0)
+            {
+                allocations.Add(new FundAllocation(
+                    fund.FundId,
+                    targetAmount,
+                    targetAmount / request.Price,
+                    (targetAmount / request.TotalAmount) * 100m,
+                    AllocationStatus.Allocated,
+                    null
+                ));
+
+                totalAllocated += targetAmount;
+            }
+
+            // Stop if we've allocated everything
+            if (totalAllocated >= request.TotalAmount)
+                break;
+        }
+
+        var summary = new AllocationSummary(
+            request.TotalAmount,
+            totalAllocated,
+            request.TotalAmount - totalAllocated,
+            totalAllocated == request.TotalAmount,
+            warnings
+        );
+
+        return new AllocationResponse(
+            request.RequestId,
+            allocations,
+            summary
+        );
+    }
+}

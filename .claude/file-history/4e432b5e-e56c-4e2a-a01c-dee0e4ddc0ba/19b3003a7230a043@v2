@@ -1,0 +1,34 @@
+using Microsoft.EntityFrameworkCore;
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Domain.Entities;
+using TradeWorkflow.Infrastructure.Data;
+
+namespace TradeWorkflow.Infrastructure.Repositories;
+
+public class TradeHistoryRepository : ITradeHistoryRepository
+{
+    private readonly TradeDbContext _context;
+
+    public TradeHistoryRepository(TradeDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<IEnumerable<TradeHistory>> GetByTradeIdAsync(Guid tradeId)
+    {
+        return await _context.TradeHistories
+            .Where(h => h.TradeId == tradeId)
+            .OrderBy(h => h.TransitionedAt)
+            .ToListAsync();
+    }
+
+    public async Task CreateAsync(TradeHistory history)
+    {
+        await _context.TradeHistories.AddAsync(history);
+    }
+
+    public async Task SaveChangesAsync()
+    {
+        await _context.SaveChangesAsync();
+    }
+}

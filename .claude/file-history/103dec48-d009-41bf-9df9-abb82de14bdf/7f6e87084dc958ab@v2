@@ -1,0 +1,13 @@
+using Aurora.AllocationEngine.Models;
+
+namespace Aurora.AllocationEngine.Interfaces;
+
+public interface IAllocationEngine
+{
+    Task<AllocationResponse> AllocateAsync(AllocationRequest request, CancellationToken cancellationToken = default);
+}
+
+public interface IAllocationStrategy
+{
+    Task<List<AllocationResult>> AllocateAsync(AllocationRequest request, CancellationToken cancellationToken = default);
+}

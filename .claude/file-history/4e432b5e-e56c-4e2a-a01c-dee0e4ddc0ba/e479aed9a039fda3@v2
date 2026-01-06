@@ -1,0 +1,55 @@
+using Microsoft.Extensions.Logging;
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Infrastructure.Services;
+
+public class TradeProcessingService : ITradeProcessingService
+{
+    private readonly ITradeRepository _tradeRepository;
+    private readonly ILogger<TradeProcessingService> _logger;
+
+    public TradeProcessingService(
+        ITradeRepository tradeRepository,
+        ILogger<TradeProcessingService> logger)
+    {
+        _tradeRepository = tradeRepository;
+        _logger = logger;
+    }
+
+    public async Task CreateTradeRecordAsync(Trade trade)
+    {
+        _logger.LogInformation("Creating new trade record for {TradeReference}", trade.TradeReference);
+        await _tradeRepository.UpdateAsync(trade);
+    }
+
+    public async Task UpdateTradeRecordAsync(Trade trade)
+    {
+        _logger.LogInformation("Updating existing trade record for {TradeReference}", trade.TradeReference);
+        await _tradeRepository.UpdateAsync(trade);
+    }
+
+    public async Task RejectTradeAsync(Trade trade, string reason)
+    {
+        _logger.LogWarning("Rejecting trade {TradeReference}. Reason: {Reason}",
+            trade.TradeReference, reason);
+
+        trade.ErrorMessage = reason;
+        await _tradeRepository.UpdateAsync(trade);
+    }
+
+    public async Task PersistToDatabaseAsync(Trade trade)
+    {
+        _logger.LogInformation("Persisting trade {TradeReference} to database", trade.TradeReference);
+        await _tradeRepository.UpdateAsync(trade);
+    }
+
+    public async Task LogErrorAsync(Trade trade, string errorMessage)
+    {
+        _logger.LogError("Error processing trade {TradeReference}: {ErrorMessage}",
+            trade.TradeReference, errorMessage);
+
+        trade.ErrorMessage = errorMessage;
+        await _tradeRepository.UpdateAsync(trade);
+    }
+}

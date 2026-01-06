@@ -1,0 +1,8 @@
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Application.Contracts;
+
+public interface IDuplicateCheckService
+{
+    Task<(bool IsDuplicate, Guid? ExistingTradeId)> CheckDuplicateAsync(Trade trade);
+}

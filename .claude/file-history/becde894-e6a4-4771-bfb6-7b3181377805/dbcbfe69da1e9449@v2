@@ -1,0 +1,8 @@
+using Shared.Contracts.DTOs;
+
+namespace Allocation.API.Strategies;
+
+public interface IAllocationStrategy
+{
+    AllocationResponse Allocate(AllocationRequest request);
+}

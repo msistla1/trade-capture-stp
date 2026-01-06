@@ -1,0 +1,162 @@
+using FluentAssertions;
+using TradeWorkflow.Infrastructure.Services;
+using TradeWorkflow.Tests.Builders;
+using Xunit;
+
+namespace TradeWorkflow.Tests.Infrastructure;
+
+public class ValidationServiceTests
+{
+    private readonly ValidationService _service;
+
+    public ValidationServiceTests()
+    {
+        _service = new ValidationService();
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenAllFieldsValid_ShouldReturnTrue()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default().Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeTrue();
+        errorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenTradeReferenceEmpty_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithTradeReference("")
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Trade reference is required");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenInstrumentEmpty_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithInstrument("")
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Instrument is required");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenCounterpartyEmpty_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithCounterparty("")
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Counterparty is required");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenQuantityZero_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithQuantity(0)
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Quantity must be greater than zero");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenPriceZero_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithPrice(0)
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Price must be greater than zero");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenMultipleFieldsInvalid_ShouldReturnAllErrors()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithTradeReference("")
+            .WithQuantity(0)
+            .WithPrice(0)
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Trade reference is required");
+        errorMessage.Should().Contain("Quantity must be greater than zero");
+        errorMessage.Should().Contain("Price must be greater than zero");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenTradeDateDefault_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithTradeDate(default)
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Trade date is required");
+    }
+
+    [Fact]
+    public async Task ValidateTradeAsync_WhenTradeTypeEmpty_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithTradeType("")
+            .Build();
+
+        // Act
+        var (isValid, errorMessage) = await _service.ValidateTradeAsync(trade);
+
+        // Assert
+        isValid.Should().BeFalse();
+        errorMessage.Should().Contain("Trade type is required");
+    }
+}

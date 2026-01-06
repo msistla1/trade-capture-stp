@@ -1,0 +1,165 @@
+using Microsoft.Extensions.Logging;
+using Shared.Common.Exceptions;
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Entities;
+
+namespace Compliance.Domain.RuleEngine;
+
+public class RuleEvaluator : IRuleEvaluator
+{
+    private readonly IScriptEngine _scriptEngine;
+    private readonly ILogger<RuleEvaluator> _logger;
+
+    public RuleEvaluator(
+        IScriptEngine scriptEngine,
+        ILogger<RuleEvaluator> logger)
+    {
+        _scriptEngine = scriptEngine;
+        _logger = logger;
+    }
+
+    public async Task<RuleEvaluationResult> EvaluateAsync(
+        ComplianceRule rule,
+        RuleContext context)
+    {
+        try
+        {
+            var globals = CreateGlobals(context, rule);
+            var expression = rule.Configuration.Expression;
+
+            var result = await _scriptEngine.EvaluateAsync<bool>(
+                expression,
+                globals);
+
+            var capacity = result
+                ? await CalculateCapacityAsync(rule, context)
+                : 0m;
+
+            return new RuleEvaluationResult(
+                rule.Id.ToString(),
+                rule.Name,
+                result,
+                GetMessage(rule, context, result),
+                capacity,
+                GetThreshold(rule, context)
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Rule evaluation failed for rule {RuleId}",
+                rule.Id);
+            throw new RuleEvaluationException(rule.Id, ex);
+        }
+    }
+
+    public async Task<decimal> CalculateCapacityAsync(
+        ComplianceRule rule,
+        RuleContext context)
+    {
+        var globals = CreateGlobals(context, rule);
+        var capacityExpression = GetCapacityExpression(rule);
+
+        try
+        {
+            var capacity = await _scriptEngine.EvaluateAsync<decimal>(
+                capacityExpression,
+                globals);
+
+            return Math.Max(0, capacity);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Capacity calculation failed for rule {RuleId}, returning 0",
+                rule.Id);
+            return 0m;
+        }
+    }
+
+    private Dictionary<string, object> CreateGlobals(RuleContext context, ComplianceRule rule)
+    {
+        return new Dictionary<string, object>
+        {
+            { "fund", context.Fund },
+            { "security", context.Security },
+            { "trade", context.Trade },
+            { "portfolio", context.Portfolio },
+            { "parameters", rule.Configuration.Parameters }
+        };
+    }
+
+    private string GetCapacityExpression(ComplianceRule rule)
+    {
+        // If rule has a custom capacity calculation, use it
+        if (rule.Configuration.Metadata.TryGetValue("capacityExpression", out var customExpr))
+        {
+            return customExpr;
+        }
+
+        // Default capacity calculation based on rule type
+        return rule.Type switch
+        {
+            Shared.Contracts.Enums.RuleType.PercentageLimit => GetPercentageLimitCapacity(),
+            Shared.Contracts.Enums.RuleType.ConcentrationLimit => GetConcentrationLimitCapacity(),
+            Shared.Contracts.Enums.RuleType.CategoricalRestriction => "decimal.MaxValue",
+            Shared.Contracts.Enums.RuleType.SecurityTypeRestriction => "decimal.MaxValue",
+            Shared.Contracts.Enums.RuleType.RatingRequirement => "decimal.MaxValue",
+            _ => "decimal.MaxValue"
+        };
+    }
+
+    private string GetPercentageLimitCapacity()
+    {
+        return @"
+            var maxPercentage = Convert.ToDecimal(parameters[""maxPercentage""]) / 100m;
+            var limit = fund.NetAssetValue.Amount * maxPercentage;
+            var currentExposure = 0m;
+
+            if (parameters.ContainsKey(""calculationType""))
+            {
+                var calcType = parameters[""calculationType""].ToString();
+                if (calcType == ""IssuerExposure"")
+                    currentExposure = portfolio.GetIssuerExposureAsync(fund.Id, security.IssuerId).Result;
+                else if (calcType == ""SecurityPosition"")
+                    currentExposure = portfolio.GetSecurityPositionAsync(fund.Id, security.Id).Result;
+            }
+
+            Math.Max(0, limit - currentExposure)
+        ";
+    }
+
+    private string GetConcentrationLimitCapacity()
+    {
+        return @"
+            var maxPercentage = Convert.ToDecimal(parameters[""maxPercentage""]) / 100m;
+            var limit = fund.NetAssetValue.Amount * maxPercentage;
+            var currentPosition = portfolio.GetSecurityPositionAsync(fund.Id, security.Id).Result;
+            Math.Max(0, limit - currentPosition)
+        ";
+    }
+
+    private string GetMessage(ComplianceRule rule, RuleContext context, bool passed)
+    {
+        if (passed)
+        {
+            return rule.Configuration.Metadata.TryGetValue("successMessage", out var msg)
+                ? msg
+                : $"Rule '{rule.Name}' passed";
+        }
+
+        return rule.Configuration.Metadata.TryGetValue("errorMessage", out var errorMsg)
+            ? errorMsg
+            : $"Rule '{rule.Name}' failed";
+    }
+
+    private decimal? GetThreshold(ComplianceRule rule, RuleContext context)
+    {
+        if (rule.Configuration.Parameters.TryGetValue("maxPercentage", out var maxPct))
+        {
+            return Convert.ToDecimal(maxPct);
+        }
+
+        return null;
+    }
+}

@@ -1,0 +1,49 @@
+using Microsoft.EntityFrameworkCore;
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Domain.Entities;
+using TradeWorkflow.Infrastructure.Data;
+
+namespace TradeWorkflow.Infrastructure.Repositories;
+
+public class TradeRepository : ITradeRepository
+{
+    private readonly TradeDbContext _context;
+
+    public TradeRepository(TradeDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<Trade?> GetByIdAsync(Guid id)
+    {
+        return await _context.Trades.FindAsync(id);
+    }
+
+    public async Task<Trade?> GetByTradeReferenceAsync(string tradeReference)
+    {
+        return await _context.Trades
+            .FirstOrDefaultAsync(t => t.TradeReference == tradeReference);
+    }
+
+    public async Task<IEnumerable<Trade>> GetAllAsync()
+    {
+        return await _context.Trades.ToListAsync();
+    }
+
+    public async Task<Trade> CreateAsync(Trade trade)
+    {
+        await _context.Trades.AddAsync(trade);
+        return trade;
+    }
+
+    public Task UpdateAsync(Trade trade)
+    {
+        _context.Trades.Update(trade);
+        return Task.CompletedTask;
+    }
+
+    public async Task SaveChangesAsync()
+    {
+        await _context.SaveChangesAsync();
+    }
+}

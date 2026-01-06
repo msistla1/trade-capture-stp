@@ -1,0 +1,49 @@
+using Microsoft.EntityFrameworkCore;
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Infrastructure.Data;
+
+public class TradeDbContext : DbContext
+{
+    public TradeDbContext(DbContextOptions<TradeDbContext> options) : base(options)
+    {
+    }
+
+    public DbSet<Trade> Trades { get; set; } = null!;
+    public DbSet<TradeHistory> TradeHistories { get; set; } = null!;
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Trade>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TradeReference).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Instrument).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Counterparty).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TradeType).HasMaxLength(50);
+            entity.Property(e => e.Price).HasPrecision(18, 4);
+            entity.Property(e => e.Quantity).HasPrecision(18, 4);
+            entity.Property(e => e.CurrentState).HasConversion<string>();
+            entity.HasIndex(e => e.TradeReference);
+            entity.HasIndex(e => e.CurrentState);
+        });
+
+        modelBuilder.Entity<TradeHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FromState).HasConversion<string>();
+            entity.Property(e => e.ToState).HasConversion<string>();
+            entity.Property(e => e.Trigger).HasConversion<string>();
+
+            entity.HasOne(e => e.Trade)
+                .WithMany()
+                .HasForeignKey(e => e.TradeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TradeId);
+            entity.HasIndex(e => e.TransitionedAt);
+        });
+    }
+}

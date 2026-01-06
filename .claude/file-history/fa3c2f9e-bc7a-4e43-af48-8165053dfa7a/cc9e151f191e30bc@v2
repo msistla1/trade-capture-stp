@@ -1,0 +1,8 @@
+using Aurora.ComplianceEngine.Models;
+
+namespace Aurora.ComplianceEngine.Interfaces;
+
+public interface IComplianceEngine
+{
+    Task<ComplianceCheckResponse> CheckComplianceAsync(ComplianceCheckRequest request, CancellationToken cancellationToken = default);
+}

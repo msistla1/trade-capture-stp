@@ -1,0 +1,86 @@
+using FluentAssertions;
+using Moq;
+using TradeWorkflow.Application.Contracts;
+using TradeWorkflow.Infrastructure.Services;
+using TradeWorkflow.Tests.Builders;
+using Xunit;
+
+namespace TradeWorkflow.Tests.Infrastructure;
+
+public class DuplicateCheckServiceTests
+{
+    private readonly Mock<ITradeRepository> _tradeRepositoryMock;
+    private readonly DuplicateCheckService _service;
+
+    public DuplicateCheckServiceTests()
+    {
+        _tradeRepositoryMock = new Mock<ITradeRepository>();
+        _service = new DuplicateCheckService(_tradeRepositoryMock.Object);
+    }
+
+    [Fact]
+    public async Task CheckDuplicateAsync_WhenNoDuplicateExists_ShouldReturnFalse()
+    {
+        // Arrange
+        var trade = TradeBuilder.Default()
+            .WithTradeReference("TRD-001")
+            .Build();
+
+        _tradeRepositoryMock.Setup(x => x.GetByTradeReferenceAsync("TRD-001"))
+            .ReturnsAsync((TradeWorkflow.Domain.Entities.Trade?)null);
+
+        // Act
+        var (isDuplicate, existingTradeId) = await _service.CheckDuplicateAsync(trade);
+
+        // Assert
+        isDuplicate.Should().BeFalse();
+        existingTradeId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CheckDuplicateAsync_WhenDuplicateExists_ShouldReturnTrue()
+    {
+        // Arrange
+        var existingTradeId = Guid.NewGuid();
+        var existingTrade = TradeBuilder.Default()
+            .WithId(existingTradeId)
+            .WithTradeReference("TRD-001")
+            .Build();
+
+        var newTrade = TradeBuilder.Default()
+            .WithId(Guid.NewGuid())
+            .WithTradeReference("TRD-001")
+            .Build();
+
+        _tradeRepositoryMock.Setup(x => x.GetByTradeReferenceAsync("TRD-001"))
+            .ReturnsAsync(existingTrade);
+
+        // Act
+        var (isDuplicate, returnedTradeId) = await _service.CheckDuplicateAsync(newTrade);
+
+        // Assert
+        isDuplicate.Should().BeTrue();
+        returnedTradeId.Should().Be(existingTradeId);
+    }
+
+    [Fact]
+    public async Task CheckDuplicateAsync_WhenSameTrade_ShouldReturnFalse()
+    {
+        // Arrange
+        var tradeId = Guid.NewGuid();
+        var trade = TradeBuilder.Default()
+            .WithId(tradeId)
+            .WithTradeReference("TRD-001")
+            .Build();
+
+        _tradeRepositoryMock.Setup(x => x.GetByTradeReferenceAsync("TRD-001"))
+            .ReturnsAsync(trade);
+
+        // Act
+        var (isDuplicate, existingTradeId) = await _service.CheckDuplicateAsync(trade);
+
+        // Assert
+        isDuplicate.Should().BeFalse();
+        existingTradeId.Should().BeNull();
+    }
+}

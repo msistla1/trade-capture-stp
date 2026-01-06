@@ -1,0 +1,12 @@
+namespace TradeWorkflow.API.Models;
+
+public class CreateTradeRequest
+{
+    public required string TradeReference { get; set; }
+    public required string Instrument { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal Price { get; set; }
+    public required string Counterparty { get; set; }
+    public DateTime TradeDate { get; set; }
+    public required string TradeType { get; set; }
+}

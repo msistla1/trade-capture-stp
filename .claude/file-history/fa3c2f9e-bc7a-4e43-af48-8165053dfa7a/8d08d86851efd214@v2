@@ -1,0 +1,18 @@
+using Aurora.Core.Entities;
+
+namespace Aurora.Core.Entities;
+
+public class Fund : BaseEntity
+{
+    public string FundCode { get; set; } = string.Empty;
+    public string FundName { get; set; } = string.Empty;
+    public Guid StrategyId { get; set; }
+    public Strategy? Strategy { get; set; }
+    public decimal CurrentNAV { get; set; }
+    public decimal AvailableCash { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public ICollection<ComplianceRule> ComplianceRules { get; set; } = new List<ComplianceRule>();
+    public ICollection<FundHolding> Holdings { get; set; } = new List<FundHolding>();
+    public ICollection<TradeAllocation> TradeAllocations { get; set; } = new List<TradeAllocation>();
+}

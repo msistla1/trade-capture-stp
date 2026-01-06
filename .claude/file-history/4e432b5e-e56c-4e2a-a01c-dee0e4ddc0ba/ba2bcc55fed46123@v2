@@ -1,0 +1,10 @@
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Application.Contracts;
+
+public interface ITradeHistoryRepository
+{
+    Task<IEnumerable<TradeHistory>> GetByTradeIdAsync(Guid tradeId);
+    Task CreateAsync(TradeHistory history);
+    Task SaveChangesAsync();
+}

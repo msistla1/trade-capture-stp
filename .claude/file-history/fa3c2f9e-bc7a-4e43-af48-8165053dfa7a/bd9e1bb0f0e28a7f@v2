@@ -1,0 +1,28 @@
+using Aurora.Core.Enums;
+
+namespace Aurora.Core.Entities;
+
+public class ComplianceCheckResult : BaseEntity
+{
+    public Guid TradeId { get; set; }
+    public Trade? Trade { get; set; }
+    public Guid FundId { get; set; }
+    public Fund? Fund { get; set; }
+    public Guid? ComplianceRuleId { get; set; }
+    public ComplianceRule? ComplianceRule { get; set; }
+
+    public bool Passed { get; set; }
+    public string RuleCode { get; set; } = string.Empty;
+    public string RuleName { get; set; } = string.Empty;
+    public ComplianceRuleSeverity Severity { get; set; }
+
+    public decimal? CurrentValue { get; set; }
+    public decimal? LimitValue { get; set; }
+    public decimal? CalculatedCapacity { get; set; }
+
+    public string Message { get; set; } = string.Empty;
+    public string? DetailedMessage { get; set; }
+    public string? OverrideReason { get; set; }
+    public string? OverrideBy { get; set; }
+    public DateTime? OverrideAt { get; set; }
+}

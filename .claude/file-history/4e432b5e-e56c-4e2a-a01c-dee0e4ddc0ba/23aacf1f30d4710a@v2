@@ -1,0 +1,16 @@
+namespace TradeWorkflow.Domain.Enums;
+
+public enum TcrTrigger
+{
+    StartValidation,
+    ValidationSucceeded,
+    ValidationFailed,
+    NoDuplicateFound,
+    DuplicateFound,
+    CreateNew,
+    UpdateExisting,
+    RejectTrade,
+    SaveSucceeded,
+    SaveFailed,
+    Retry
+}

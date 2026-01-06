@@ -1,0 +1,148 @@
+using Aurora.Core.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace Aurora.Infrastructure.Data;
+
+public class AuroraDbContext : DbContext
+{
+    public AuroraDbContext(DbContextOptions<AuroraDbContext> options) : base(options)
+    {
+    }
+
+    public DbSet<Trade> Trades => Set<Trade>();
+    public DbSet<Fund> Funds => Set<Fund>();
+    public DbSet<Strategy> Strategies => Set<Strategy>();
+    public DbSet<Security> Securities => Set<Security>();
+    public DbSet<Issuer> Issuers => Set<Issuer>();
+    public DbSet<Counterparty> Counterparties => Set<Counterparty>();
+    public DbSet<TradeAllocation> TradeAllocations => Set<TradeAllocation>();
+    public DbSet<FundHolding> FundHoldings => Set<FundHolding>();
+    public DbSet<ComplianceRule> ComplianceRules => Set<ComplianceRule>();
+    public DbSet<ComplianceCheckResult> ComplianceCheckResults => Set<ComplianceCheckResult>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        // Configure precision for decimal properties
+        modelBuilder.Entity<Trade>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TotalTradeAmount).HasPrecision(18, 2);
+            entity.Property(e => e.Price).HasPrecision(18, 6);
+            entity.Property(e => e.Quantity).HasPrecision(18, 6);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Security).WithMany().HasForeignKey(e => e.SecurityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Counterparty).WithMany().HasForeignKey(e => e.CounterpartyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Strategy).WithMany().HasForeignKey(e => e.StrategyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Fund>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CurrentNAV).HasPrecision(18, 2);
+            entity.Property(e => e.AvailableCash).HasPrecision(18, 2);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Strategy).WithMany(s => s.Funds).HasForeignKey(e => e.StrategyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Strategy>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<Security>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Issuer).WithMany(i => i.Securities).HasForeignKey(e => e.IssuerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Issuer>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<Counterparty>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<TradeAllocation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AllocatedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.AllocatedQuantity).HasPrecision(18, 6);
+            entity.Property(e => e.AllocationPercentage).HasPrecision(5, 2);
+            entity.Property(e => e.AvailableCapacity).HasPrecision(18, 2);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Trade).WithMany(t => t.Allocations).HasForeignKey(e => e.TradeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Fund).WithMany(f => f.TradeAllocations).HasForeignKey(e => e.FundId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FundHolding>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Quantity).HasPrecision(18, 6);
+            entity.Property(e => e.MarketValue).HasPrecision(18, 2);
+            entity.Property(e => e.CostBasis).HasPrecision(18, 2);
+            entity.Property(e => e.PercentOfNAV).HasPrecision(5, 2);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Fund).WithMany(f => f.Holdings).HasForeignKey(e => e.FundId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Security).WithMany().HasForeignKey(e => e.SecurityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Issuer).WithMany().HasForeignKey(e => e.IssuerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ComplianceRule>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.LimitValue).HasPrecision(18, 6);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Fund).WithMany(f => f.ComplianceRules).HasForeignKey(e => e.FundId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComplianceCheckResult>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CurrentValue).HasPrecision(18, 2);
+            entity.Property(e => e.LimitValue).HasPrecision(18, 6);
+            entity.Property(e => e.CalculatedCapacity).HasPrecision(18, 2);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            entity.HasOne(e => e.Trade).WithMany(t => t.ComplianceCheckResults).HasForeignKey(e => e.TradeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Fund).WithMany().HasForeignKey(e => e.FundId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ComplianceRule).WithMany().HasForeignKey(e => e.ComplianceRuleId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var entries = ChangeTracker.Entries<BaseEntity>();
+
+        foreach (var entry in entries)
+        {
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+}

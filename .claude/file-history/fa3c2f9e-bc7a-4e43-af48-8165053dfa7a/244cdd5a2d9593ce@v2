@@ -1,0 +1,34 @@
+using Aurora.ComplianceEngine.Models;
+using Aurora.Core.DTOs;
+using Aurora.Core.Entities;
+using Aurora.Core.Enums;
+
+namespace Aurora.AllocationEngine.Models;
+
+public class AllocationRequest
+{
+    public Trade Trade { get; set; } = null!;
+    public AllocationMethodology Methodology { get; set; }
+    public ComplianceCheckResponse ComplianceResults { get; set; } = null!;
+    public List<CustomAllocationDto>? CustomAllocations { get; set; }
+}
+
+public class AllocationResponse
+{
+    public bool Success { get; set; }
+    public List<AllocationResult> Allocations { get; set; } = new List<AllocationResult>();
+    public decimal TotalAllocated { get; set; }
+    public decimal TotalRequested { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public TimeSpan ExecutionTime { get; set; }
+}
+
+public class AllocationResult
+{
+    public Fund Fund { get; set; } = null!;
+    public decimal AllocatedAmount { get; set; }
+    public decimal AllocatedQuantity { get; set; }
+    public decimal AllocationPercentage { get; set; }
+    public decimal AvailableCapacity { get; set; }
+    public string AllocationReason { get; set; } = string.Empty;
+}

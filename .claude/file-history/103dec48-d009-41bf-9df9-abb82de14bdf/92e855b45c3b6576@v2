@@ -1,0 +1,402 @@
+using Aurora.Core.Entities;
+using Aurora.Core.Enums;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace Aurora.Infrastructure.Data;
+
+public static class SeedData
+{
+    public static async Task SeedAsync(AuroraDbContext context, ILogger logger)
+    {
+        logger.LogInformation("Starting database seeding...");
+
+        // Check if data already exists
+        if (await context.Strategies.AnyAsync())
+        {
+            logger.LogInformation("Database already seeded");
+            return;
+        }
+
+        // Create Strategies
+        var equityStrategy = new Strategy
+        {
+            Id = Guid.NewGuid(),
+            StrategyCode = "EQUITY",
+            StrategyName = "Equity Growth Strategy",
+            Description = "Long-term equity growth strategy"
+        };
+
+        var fixedIncomeStrategy = new Strategy
+        {
+            Id = Guid.NewGuid(),
+            StrategyCode = "FI",
+            StrategyName = "Fixed Income Strategy",
+            Description = "Conservative fixed income strategy"
+        };
+
+        await context.Strategies.AddRangeAsync(equityStrategy, fixedIncomeStrategy);
+        await context.SaveChangesAsync();
+
+        // Create Funds
+        var funds = new List<Fund>
+        {
+            new Fund
+            {
+                Id = Guid.NewGuid(),
+                FundCode = "FUND001",
+                FundName = "Growth Fund I",
+                StrategyId = equityStrategy.Id,
+                CurrentNAV = 10000000m,
+                AvailableCash = 2000000m,
+                IsActive = true
+            },
+            new Fund
+            {
+                Id = Guid.NewGuid(),
+                FundCode = "FUND002",
+                FundName = "Growth Fund II",
+                StrategyId = equityStrategy.Id,
+                CurrentNAV = 15000000m,
+                AvailableCash = 3000000m,
+                IsActive = true
+            },
+            new Fund
+            {
+                Id = Guid.NewGuid(),
+                FundCode = "FUND003",
+                FundName = "Growth Fund III",
+                StrategyId = equityStrategy.Id,
+                CurrentNAV = 8000000m,
+                AvailableCash = 1500000m,
+                IsActive = true
+            },
+            new Fund
+            {
+                Id = Guid.NewGuid(),
+                FundCode = "FUND004",
+                FundName = "Income Fund I",
+                StrategyId = fixedIncomeStrategy.Id,
+                CurrentNAV = 20000000m,
+                AvailableCash = 5000000m,
+                IsActive = true
+            },
+            new Fund
+            {
+                Id = Guid.NewGuid(),
+                FundCode = "FUND005",
+                FundName = "Income Fund II",
+                StrategyId = fixedIncomeStrategy.Id,
+                CurrentNAV = 12000000m,
+                AvailableCash = 2500000m,
+                IsActive = true
+            }
+        };
+
+        await context.Funds.AddRangeAsync(funds);
+        await context.SaveChangesAsync();
+
+        // Create Issuers
+        var issuers = new List<Issuer>
+        {
+            new Issuer
+            {
+                Id = Guid.NewGuid(),
+                IssuerCode = "AAPL",
+                IssuerName = "Apple Inc.",
+                CountryOfRisk = "USA",
+                Sector = "Technology",
+                Industry = "Consumer Electronics"
+            },
+            new Issuer
+            {
+                Id = Guid.NewGuid(),
+                IssuerCode = "MSFT",
+                IssuerName = "Microsoft Corporation",
+                CountryOfRisk = "USA",
+                Sector = "Technology",
+                Industry = "Software"
+            },
+            new Issuer
+            {
+                Id = Guid.NewGuid(),
+                IssuerCode = "JPM",
+                IssuerName = "JPMorgan Chase & Co.",
+                CountryOfRisk = "USA",
+                Sector = "Financials",
+                Industry = "Banking"
+            },
+            new Issuer
+            {
+                Id = Guid.NewGuid(),
+                IssuerCode = "UST",
+                IssuerName = "U.S. Treasury",
+                CountryOfRisk = "USA",
+                Sector = "Government",
+                Industry = "Sovereign"
+            }
+        };
+
+        await context.Issuers.AddRangeAsync(issuers);
+        await context.SaveChangesAsync();
+
+        // Create Securities
+        var securities = new List<Security>
+        {
+            new Security
+            {
+                Id = Guid.NewGuid(),
+                ISIN = "US0378331005",
+                Ticker = "AAPL",
+                SecurityName = "Apple Inc. Common Stock",
+                AssetClass = "Equity",
+                SecurityType = "Common Stock",
+                Rating = "AA+",
+                IssuerId = issuers[0].Id
+            },
+            new Security
+            {
+                Id = Guid.NewGuid(),
+                ISIN = "US5949181045",
+                Ticker = "MSFT",
+                SecurityName = "Microsoft Corporation Common Stock",
+                AssetClass = "Equity",
+                SecurityType = "Common Stock",
+                Rating = "AAA",
+                IssuerId = issuers[1].Id
+            },
+            new Security
+            {
+                Id = Guid.NewGuid(),
+                ISIN = "US46625H1005",
+                Ticker = "JPM",
+                SecurityName = "JPMorgan Chase & Co. Common Stock",
+                AssetClass = "Equity",
+                SecurityType = "Common Stock",
+                Rating = "A+",
+                IssuerId = issuers[2].Id
+            },
+            new Security
+            {
+                Id = Guid.NewGuid(),
+                ISIN = "US912828XG93",
+                Ticker = "T-BILL",
+                SecurityName = "U.S. Treasury Bill 6M",
+                AssetClass = "Fixed Income",
+                SecurityType = "Government Bond",
+                Rating = "AAA",
+                IssuerId = issuers[3].Id
+            }
+        };
+
+        await context.Securities.AddRangeAsync(securities);
+        await context.SaveChangesAsync();
+
+        // Create Counterparties
+        var counterparties = new List<Counterparty>
+        {
+            new Counterparty
+            {
+                Id = Guid.NewGuid(),
+                CounterpartyCode = "GS",
+                CounterpartyName = "Goldman Sachs",
+                CounterpartyType = "Broker-Dealer",
+                IsActive = true
+            },
+            new Counterparty
+            {
+                Id = Guid.NewGuid(),
+                CounterpartyCode = "MS",
+                CounterpartyName = "Morgan Stanley",
+                CounterpartyType = "Broker-Dealer",
+                IsActive = true
+            },
+            new Counterparty
+            {
+                Id = Guid.NewGuid(),
+                CounterpartyCode = "BARCLAYS",
+                CounterpartyName = "Barclays Capital",
+                CounterpartyType = "Broker-Dealer",
+                IsActive = true
+            }
+        };
+
+        await context.Counterparties.AddRangeAsync(counterparties);
+        await context.SaveChangesAsync();
+
+        // Create Compliance Rules for each fund
+        var complianceRules = new List<ComplianceRule>();
+
+        // Rules for FUND001 (Growth Fund I)
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND001-ISSUER-CONC",
+            RuleName = "Issuer Concentration Limit",
+            Description = "Single issuer cannot exceed 5% of NAV",
+            FundId = funds[0].Id,
+            RuleLevel = ComplianceRuleLevel.Issuer,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            LimitValue = 5.0m,
+            LimitUnit = "Percentage",
+            RuleExpression = "true", // Percentage calculation done in engine
+            IsActive = true,
+            Priority = 100
+        });
+
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND001-RATING",
+            RuleName = "Investment Grade Only",
+            Description = "Fund can only invest in investment grade securities (BBB- or better)",
+            FundId = funds[0].Id,
+            RuleLevel = ComplianceRuleLevel.Asset,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            RuleExpression = "rating != null && (rating.Contains(\"AAA\") || rating.Contains(\"AA\") || rating.Contains(\"A\") || rating.Contains(\"BBB\"))",
+            IsActive = true,
+            Priority = 90
+        });
+
+        // Rules for FUND002 (Growth Fund II)
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND002-ISSUER-CONC",
+            RuleName = "Issuer Concentration Limit",
+            Description = "Single issuer cannot exceed 10% of NAV",
+            FundId = funds[1].Id,
+            RuleLevel = ComplianceRuleLevel.Issuer,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            LimitValue = 10.0m,
+            LimitUnit = "Percentage",
+            RuleExpression = "true",
+            IsActive = true,
+            Priority = 100
+        });
+
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND002-SECTOR",
+            RuleName = "No Banking Sector",
+            Description = "Cannot invest in banking sector securities",
+            FundId = funds[1].Id,
+            RuleLevel = ComplianceRuleLevel.Issuer,
+            Severity = ComplianceRuleSeverity.Soft,
+            LimitType = LimitType.Max,
+            RuleExpression = "sector != \"Financials\" || industry != \"Banking\"",
+            IsActive = true,
+            Priority = 80
+        });
+
+        // Rules for FUND003 (Growth Fund III)
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND003-ISSUER-CONC",
+            RuleName = "Issuer Concentration Limit",
+            Description = "Single issuer cannot exceed 7% of NAV",
+            FundId = funds[2].Id,
+            RuleLevel = ComplianceRuleLevel.Issuer,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            LimitValue = 7.0m,
+            LimitUnit = "Percentage",
+            RuleExpression = "true",
+            IsActive = true,
+            Priority = 100
+        });
+
+        // Rules for FUND004 (Income Fund I)
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND004-BONDS-ONLY",
+            RuleName = "Bonds Only",
+            Description = "Can only invest in bonds, not equities",
+            FundId = funds[3].Id,
+            RuleLevel = ComplianceRuleLevel.Asset,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            RuleExpression = "assetClass == \"Fixed Income\"",
+            IsActive = true,
+            Priority = 100
+        });
+
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND004-ISSUER-CONC",
+            RuleName = "Issuer Concentration Limit",
+            Description = "Single issuer cannot exceed 15% of NAV",
+            FundId = funds[3].Id,
+            RuleLevel = ComplianceRuleLevel.Issuer,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            LimitValue = 15.0m,
+            LimitUnit = "Percentage",
+            RuleExpression = "true",
+            IsActive = true,
+            Priority = 90
+        });
+
+        // Rules for FUND005 (Income Fund II)
+        complianceRules.Add(new ComplianceRule
+        {
+            Id = Guid.NewGuid(),
+            RuleCode = "FUND005-GOV-ONLY",
+            RuleName = "Government Securities Only",
+            Description = "Can only invest in government securities (T-Bills, T-Notes, T-Bonds)",
+            FundId = funds[4].Id,
+            RuleLevel = ComplianceRuleLevel.Asset,
+            Severity = ComplianceRuleSeverity.Hard,
+            LimitType = LimitType.Max,
+            RuleExpression = "securityType.Contains(\"Government\")",
+            IsActive = true,
+            Priority = 100
+        });
+
+        await context.ComplianceRules.AddRangeAsync(complianceRules);
+        await context.SaveChangesAsync();
+
+        // Create some existing holdings for funds to test capacity calculations
+        var holdings = new List<FundHolding>
+        {
+            new FundHolding
+            {
+                Id = Guid.NewGuid(),
+                FundId = funds[0].Id,
+                SecurityId = securities[0].Id,
+                IssuerId = issuers[0].Id,
+                Quantity = 5000m,
+                MarketValue = 450000m, // 4.5% of 10M NAV
+                CostBasis = 400000m,
+                PercentOfNAV = 4.5m,
+                AsOfDate = DateTime.UtcNow.AddDays(-1)
+            },
+            new FundHolding
+            {
+                Id = Guid.NewGuid(),
+                FundId = funds[1].Id,
+                SecurityId = securities[1].Id,
+                IssuerId = issuers[1].Id,
+                Quantity = 8000m,
+                MarketValue = 1200000m, // 8% of 15M NAV
+                CostBasis = 1000000m,
+                PercentOfNAV = 8.0m,
+                AsOfDate = DateTime.UtcNow.AddDays(-1)
+            }
+        };
+
+        await context.FundHoldings.AddRangeAsync(holdings);
+        await context.SaveChangesAsync();
+
+        logger.LogInformation("Database seeding completed successfully");
+        logger.LogInformation("Created {StrategyCount} strategies, {FundCount} funds, {SecurityCount} securities, {RuleCount} compliance rules",
+            2, funds.Count, securities.Count, complianceRules.Count);
+    }
+}

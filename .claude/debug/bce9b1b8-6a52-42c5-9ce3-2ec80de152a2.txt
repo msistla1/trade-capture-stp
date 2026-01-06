@@ -1,0 +1,21 @@
+2026-01-05T16:47:29.002Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:47:29.003Z [DEBUG] [Query.streamInput] Finished processing 0 messages from input stream
+2026-01-05T16:47:29.003Z [DEBUG] [Query.streamInput] Has bidirectional needs, waiting for first result
+2026-01-05T16:47:32.027Z [DEBUG] [SLOW OPERATION DETECTED] fs.existsSync (62.8ms)
+2026-01-05T16:47:32.050Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:47:32.050Z [DEBUG] [Query.streamInput] Finished processing 0 messages from input stream
+2026-01-05T16:47:32.050Z [DEBUG] [Query.streamInput] Has bidirectional needs, waiting for first result
+2026-01-05T16:48:10.418Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:48:10.418Z [DEBUG] [Query.streamInput] Finished processing 0 messages from input stream
+2026-01-05T16:48:10.418Z [DEBUG] [Query.streamInput] Has bidirectional needs, waiting for first result
+2026-01-05T16:48:24.887Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:48:29.357Z [DEBUG] [Query.streamInput] Finished processing 0 messages from input stream
+2026-01-05T16:48:29.357Z [DEBUG] [Query.streamInput] Has bidirectional needs, waiting for first result
+2026-01-05T16:48:34.256Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:48:34.257Z [DEBUG] [Query.streamInput] Finished processing 0 messages from input stream
+2026-01-05T16:48:34.257Z [DEBUG] [Query.streamInput] Has bidirectional needs, waiting for first result
+2026-01-05T16:50:05.381Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:50:06.107Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:50:07.455Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:50:12.387Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-01-05T16:50:14.583Z [DEBUG] [Query.streamInput] Starting to process input stream

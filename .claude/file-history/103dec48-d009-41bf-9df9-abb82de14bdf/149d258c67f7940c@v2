@@ -1,0 +1,76 @@
+using Aurora.AllocationEngine.Interfaces;
+using Aurora.AllocationEngine.Models;
+using Microsoft.Extensions.Logging;
+
+namespace Aurora.AllocationEngine.Strategies;
+
+public class CustomAllocationStrategy : IAllocationStrategy
+{
+    private readonly ILogger<CustomAllocationStrategy> _logger;
+
+    public CustomAllocationStrategy(ILogger<CustomAllocationStrategy> logger)
+    {
+        _logger = logger;
+    }
+
+    public async Task<List<AllocationResult>> AllocateAsync(AllocationRequest request, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Executing Custom allocation for trade {TradeRef}", request.Trade.TradeReference);
+
+        var allocations = new List<AllocationResult>();
+
+        if (request.CustomAllocations == null || !request.CustomAllocations.Any())
+        {
+            _logger.LogWarning("No custom allocations provided");
+            return allocations;
+        }
+
+        // Match custom allocations with compliance results
+        foreach (var customAlloc in request.CustomAllocations)
+        {
+            var fundResult = request.ComplianceResults.FundResults
+                .FirstOrDefault(f => f.Fund.Id == customAlloc.FundId);
+
+            if (fundResult == null)
+            {
+                _logger.LogWarning("Fund {FundId} not found in compliance results", customAlloc.FundId);
+                continue;
+            }
+
+            if (!fundResult.Passed)
+            {
+                _logger.LogWarning("Fund {FundCode} failed compliance, skipping", fundResult.Fund.FundCode);
+                continue;
+            }
+
+            var fund = fundResult.Fund;
+            var effectiveCapacity = Math.Min(fundResult.AvailableCapacity, fund.AvailableCash);
+
+            // Use target amount if specified, otherwise calculate from percentage
+            var targetAmount = customAlloc.TargetAmount > 0
+                ? customAlloc.TargetAmount
+                : request.Trade.TotalTradeAmount * (customAlloc.TargetPercentage / 100m);
+
+            // Ensure we don't exceed capacity
+            var allocatedAmount = Math.Min(targetAmount, effectiveCapacity);
+
+            if (allocatedAmount > 0)
+            {
+                allocations.Add(new AllocationResult
+                {
+                    Fund = fund,
+                    AllocatedAmount = allocatedAmount,
+                    AllocatedQuantity = allocatedAmount / request.Trade.Price,
+                    AllocationPercentage = (allocatedAmount / request.Trade.TotalTradeAmount) * 100,
+                    AvailableCapacity = fundResult.AvailableCapacity,
+                    AllocationReason = $"Custom allocation (Target: {targetAmount:C}, Actual: {allocatedAmount:C})"
+                });
+            }
+        }
+
+        _logger.LogInformation("Custom allocation completed: {FundCount} funds, Total: {Total:C}",
+            allocations.Count, allocations.Sum(a => a.AllocatedAmount));
+
+        return await Task.FromResult(allocations);
+    }
+}

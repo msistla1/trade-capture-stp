@@ -1,0 +1,8 @@
+using TradeWorkflow.Domain.Entities;
+
+namespace TradeWorkflow.Application.Contracts;
+
+public interface IValidationService
+{
+    Task<(bool IsValid, string? ErrorMessage)> ValidateTradeAsync(Trade trade);
+}
