@@ -1,7 +1,0 @@
-namespace Aurora.Core.Interfaces;
-
-public interface IAuditLogger
-{
-    Task LogAsync(string module, string action, string entityType, string entityId, string details, Guid? tradeId = null, string? userId = null);
-    Task<IEnumerable<DTOs.AuditEntry>> GetAuditTrailAsync(Guid tradeId);
-}

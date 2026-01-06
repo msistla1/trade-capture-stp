@@ -1,8 +1,0 @@
-using Shared.Contracts.DTOs;
-
-namespace Compliance.API.Services;
-
-public interface IComplianceService
-{
-    Task<ComplianceResponse> EvaluateAsync(ComplianceRequest request);
-}
